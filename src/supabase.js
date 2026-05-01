@@ -1,11 +1,13 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = '...'
-const supabaseKey = '...'
+const supabaseUrl = "TON_URL_SUPABASE";
+const supabaseAnonKey = "TA_CLE_ANON_SUPABASE";
 
-export const supabase = createClient(supabaseUrl, supabaseKey, {
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    persistSession: false,
-    autoRefreshToken: false,
+    persistSession: true,
+    autoRefreshToken: true,
+    detectSessionInUrl: true,
+    storage: window.sessionStorage,
   },
-})
+});
