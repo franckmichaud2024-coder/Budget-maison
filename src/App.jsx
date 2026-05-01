@@ -11,54 +11,8 @@ const COMPTES_BUDGET = [
 
 
 const SNAPSHOT_KEY = "budget_maison_snapshots_v1";
-const RESET_PASSWORD = "1234"; // Mot de passe seulement pour réinitialiser le tableau
-
-// Sécurité login PRO MAX
-// - Supabase Auth = seul vrai login
-// - Refresh = reste connecté
-// - Inactivité 30 min = déconnexion automatique
-// - Fermeture complète du navigateur = retour login si supabase.js utilise sessionStorage
-const SESSION_LAST_ACTIVITY_KEY = "budget_maison_last_activity_v2";
-const SESSION_TIMEOUT_MS = 30 * 60 * 1000;
-
-function marquerActiviteSession() {
-  try {
-    window.sessionStorage.setItem(SESSION_LAST_ACTIVITY_KEY, String(Date.now()));
-  } catch {
-    // sessionStorage indisponible : on laisse Supabase gérer la session
-  }
-}
-
-function sessionInactiviteExpiree() {
-  try {
-    const last = Number(window.sessionStorage.getItem(SESSION_LAST_ACTIVITY_KEY) || 0);
-    return last > 0 && Date.now() - last > SESSION_TIMEOUT_MS;
-  } catch {
-    return false;
-  }
-}
-
-function nettoyerAuthLocal() {
-  try {
-    [window.localStorage, window.sessionStorage].forEach((storage) => {
-      if (!storage) return;
-
-      Object.keys(storage).forEach((key) => {
-        const k = key.toLowerCase();
-        if (
-          k.includes("supabase") ||
-          k.includes("auth-token") ||
-          k.startsWith("sb-") ||
-          key === SESSION_LAST_ACTIVITY_KEY
-        ) {
-          storage.removeItem(key);
-        }
-      });
-    });
-  } catch {
-    // aucun blocage si le navigateur refuse l'accès storage
-  }
-}
+const RESET_PASSWORD = "1234"; // Change ce mot de passe ici
+// Login sécurisé via Supabase Auth
 
 function lireSnapshots() {
   try {
@@ -224,7 +178,7 @@ const colonnesFixes = [
   { key: "echeance", width: 90 },
   { key: "x", width: 45 },
   { key: "accumule", width: 105 },
-  { key: "action", width: 155 },
+  { key: "action", width: 95 },
 ];
 
 function leftOffset(index) {
@@ -306,10 +260,11 @@ function getJoursCalendrier(date = new Date()) {
 
 export default function App() {
   const [session, setSession] = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const [authLoading, setAuthLoading] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const tableScrollRef = useRef(null);
   const lastScrollRef = useRef(0);
@@ -364,8 +319,6 @@ export default function App() {
       return {};
     }
   });
-
-  const [input3177Actif, setInput3177Actif] = useState(null);
 
   const [showCalendarPanel, setShowCalendarPanel] = useState(false);
   const [calendarDate, setCalendarDate] = useState(new Date());
@@ -635,6 +588,13 @@ export default function App() {
   }
 
   async function loadData() {
+    // En mode invité, on affiche l'interface sans forcer une lecture Supabase.
+    // Les données sécurisées restent disponibles seulement quand Admin est connecté.
+    if (!session) {
+      setData([]);
+      return [];
+    }
+
     const compteSource =
       compteEstArgentAccumule(compteActif)
         ? trouverCompteParIntitule("Enveloppes")
@@ -666,45 +626,23 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
 
+    // MODE HYBRIDE : on ne bloque jamais le dashboard pendant la vérification Supabase.
+    // Si une session existe, on passe en admin. Sinon, l'app reste accessible en invité.
     async function verifierSession() {
-      setAuthLoading(true);
-
-      const { data, error } = await supabase.auth.getSession();
-
-      if (!mounted) return;
-
-      if (error) {
-        console.error("Erreur getSession:", error.message);
-        setSession(null);
-        setAuthLoading(false);
-        return;
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (mounted) setSession(data?.session || null);
+      } catch (err) {
+        console.warn("Session Supabase non disponible, ouverture en mode invité.", err);
+        if (mounted) setSession(null);
+      } finally {
+        if (mounted) setAuthLoading(false);
       }
-
-      if (data.session && sessionInactiviteExpiree()) {
-        await supabase.auth.signOut({ scope: "local" });
-        nettoyerAuthLocal();
-        setSession(null);
-        setAuthLoading(false);
-        return;
-      }
-
-      if (data.session) {
-        marquerActiviteSession();
-      }
-
-      setSession(data.session || null);
-      setAuthLoading(false);
     }
 
     verifierSession();
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      if (!mounted) return;
-
-      if (newSession) {
-        marquerActiviteSession();
-      }
-
       setSession(newSession || null);
       setAuthLoading(false);
     });
@@ -716,39 +654,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!session) return;
-
-    const enregistrerActivite = () => marquerActiviteSession();
-
-    const verifierInactivite = async () => {
-      if (sessionInactiviteExpiree()) {
-        await supabase.auth.signOut({ scope: "local" });
-        nettoyerAuthLocal();
-        setSession(null);
-        setLoginPassword("");
-        setLoginError("Session expirée après 30 minutes d’inactivité.");
-      }
-    };
-
-    ["click", "keydown", "mousemove", "touchstart"].forEach((eventName) => {
-      window.addEventListener(eventName, enregistrerActivite, { passive: true });
-    });
-
-    const timer = window.setInterval(verifierInactivite, 60 * 1000);
-
-    return () => {
-      ["click", "keydown", "mousemove", "touchstart"].forEach((eventName) => {
-        window.removeEventListener(eventName, enregistrerActivite);
-      });
-      window.clearInterval(timer);
-    };
-  }, [session]);
-
-  useEffect(() => {
     loadBlocs();
     loadData();
     setSnapshots(lireSnapshots());
-  }, [compteActif]);
+  }, [compteActif, session]);
 
   useEffect(() => {
     const timer = setInterval(() => setNowLive(new Date()), 60000);
@@ -1051,44 +960,31 @@ export default function App() {
   async function seConnecter(e) {
     e.preventDefault();
     setLoginError("");
-
-    const email = loginEmail.trim().toLowerCase();
-    const password = loginPassword;
-
-    if (!email || !password) {
-      setLoginError("Entre ton courriel et ton mot de passe.");
-      return;
-    }
-
     setAuthLoading(true);
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
+      email: loginEmail.trim(),
+      password: loginPassword,
     });
 
     setAuthLoading(false);
 
     if (error) {
-      console.error("Erreur login Supabase:", error.message);
-      setLoginError(error.message || "Courriel ou mot de passe incorrect.");
+      setLoginError("Courriel ou mot de passe incorrect.");
       return;
     }
 
-    marquerActiviteSession();
-    setSession(data.session || null);
-    setLoginEmail(email);
+    setSession(data.session);
     setLoginPassword("");
-    setLoginError("");
+    setShowLoginModal(false);
   }
 
   async function seDeconnecter() {
-    await supabase.auth.signOut({ scope: "local" });
-    nettoyerAuthLocal();
+    await supabase.auth.signOut();
     setSession(null);
     setLoginEmail("");
     setLoginPassword("");
-    setLoginError("");
+    setShowLoginModal(false);
   }
 
 
@@ -1757,9 +1653,8 @@ export default function App() {
   }
 
   function modifierValeur3177(id, champ, valeur) {
-    const numericValue = String(valeur ?? "").replace(",", ".").trim();
-    const nombre = numericValue === "" ? 0 : Number(numericValue);
-    const cleanValue = Number.isFinite(nombre) ? round2(nombre) : 0;
+    const numericValue = String(valeur).replace(",", ".");
+    const cleanValue = numericValue === "" ? "" : round2(numericValue);
 
     const nextValues = {
       ...valeurs3177,
@@ -1814,27 +1709,18 @@ export default function App() {
   }
 
   function renduInput3177(ligne, champ, valeur, align = "right") {
-    const inputKey = `${ligne.id}-${champ}`;
     const valeurSauvee = valeurs3177?.[ligne.id]?.[champ];
-    const valeurBrute =
-      valeurSauvee === undefined || valeurSauvee === null || valeurSauvee === ""
-        ? valeur
-        : valeurSauvee;
 
     const valeurAffichee =
-      input3177Actif === inputKey
-        ? String(valeurBrute ?? "")
-        : Number(valeurBrute || 0).toFixed(2);
+      valeurSauvee === undefined || valeurSauvee === null
+        ? Number(valeur || 0).toFixed(2)
+        : String(valeurSauvee);
 
     return (
       <input
         type="text"
         inputMode="decimal"
         value={valeurAffichee}
-        onFocus={(e) => {
-          setInput3177Actif(inputKey);
-          requestAnimationFrame(() => e.target.select());
-        }}
         onChange={(e) => {
           const texte = e.target.value.replace(",", ".");
           if (/^-?\d*\.?\d*$/.test(texte)) {
@@ -1848,10 +1734,7 @@ export default function App() {
             sauvegarderValeurs3177(nextValues);
           }
         }}
-        onBlur={(e) => {
-          modifierValeur3177(ligne.id, champ, e.target.value);
-          setInput3177Actif(null);
-        }}
+        onBlur={(e) => modifierValeur3177(ligne.id, champ, e.target.value)}
         style={{
           ...styles.bank3177Input,
           textAlign: align,
@@ -1986,45 +1869,13 @@ export default function App() {
     );
   }
 
-  function headerActionFixe() {
-    return (
-      <th
-        style={{
-          ...styles.th,
-          ...styles.actionHeaderCell,
-          minWidth: colonnesFixes[8].width,
-          width: colonnesFixes[8].width,
-        }}
-      >
-        ACTION
-      </th>
-    );
-  }
-
-  function celluleActionFixe(content, attrs = {}) {
-    return (
-      <td
-        {...attrs}
-        style={{
-          ...styles.td,
-          ...styles.actionUltraStickyCell,
-          minWidth: colonnesFixes[8].width,
-          width: colonnesFixes[8].width,
-          verticalAlign: "middle",
-        }}
-      >
-        {content}
-      </td>
-    );
-  }
-
   const categoriesTriees = trierCategories(STRUCTURE_BUDGET[blocActif] || ["Autre"]);
   const comptePrincipalBudget = trouverCompteParIntitule("Enveloppes");
   const compteArgentAccumule = trouverCompteParIntitule("Argent accumulé");
   const afficherTableauDetaille = compteEstEnveloppes(compteActif);
 
 
-  if (authLoading) {
+  if (false && authLoading) {
     return (
       <div style={styles.loginPage}>
         <div style={styles.loginCard}>
@@ -2035,7 +1886,7 @@ export default function App() {
     );
   }
 
-  if (!session) {
+  if (false && !session) {
     return (
       <>
         <style>{`
@@ -2232,7 +2083,7 @@ export default function App() {
               <div style={styles.bankCardScan}></div>
             </div>
         <div>
-          <div style={styles.titleSmall}>Budget personnel · Interface PRO</div>
+          <div style={styles.titleSmall}>Budget personnel · Interface PRO · {session ? "Admin connecté" : "Mode invité"}</div>
           <h1 style={styles.title}>DASHBOARD BUDGET MAISON</h1>
         </div>
       </div>
@@ -2329,7 +2180,18 @@ export default function App() {
         title="Glisse cette barre pour la déplacer"
       >
         <div style={styles.miniDockHandle}>☰ Utilisateur</div>
-        <div style={styles.userBadge}>🟢 {session?.user?.email}</div>
+        {session ? (
+          <div style={styles.userBadge}>🟢 {session.user.email}</div>
+        ) : (
+          <button
+            onClick={() => setShowLoginModal(true)}
+            style={styles.cleanButton}
+            type="button"
+            title="Connexion admin"
+          >
+            👤 Mode invité
+          </button>
+        )}
       </div>
 
       <div
@@ -2379,10 +2241,63 @@ export default function App() {
           Réinitialiser
         </button>
 
-        <button onClick={seDeconnecter} style={styles.cleanLogoutButton} type="button">
-          Déconnexion
-        </button>
+        {session ? (
+          <button onClick={seDeconnecter} style={styles.cleanLogoutButton} type="button">
+            Déconnexion
+          </button>
+        ) : (
+          <button onClick={() => setShowLoginModal(true)} style={styles.cleanLogoutButton} type="button">
+            Admin
+          </button>
+        )}
       </div>
+
+      {showLoginModal && !session && (
+        <div style={styles.guideOverlay}>
+          <form onSubmit={seConnecter} style={{ ...styles.loginCard, width: 430, maxWidth: "92vw" }}>
+            <div style={styles.loginGlow}></div>
+            <div style={styles.loginTitle}>CONNEXION ADMIN</div>
+            <div style={styles.loginSubtitle}>
+              Mode hybride actif — le dashboard reste accessible en invité.
+            </div>
+
+            <label style={styles.loginLabel}>Courriel</label>
+            <input
+              type="email"
+              value={loginEmail}
+              onChange={(e) => setLoginEmail(e.target.value)}
+              style={styles.loginInput}
+              autoFocus
+            />
+
+            <label style={styles.loginLabel}>Mot de passe</label>
+            <input
+              type="password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              style={styles.loginInput}
+            />
+
+            {loginError && <div style={styles.loginError}>{loginError}</div>}
+
+            <button type="submit" style={styles.loginButton} disabled={authLoading}>
+              {authLoading ? "Connexion..." : "Se connecter admin"}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowLoginModal(false);
+                setLoginError("");
+                setLoginPassword("");
+              }}
+              style={{ ...styles.cleanButton, width: "100%", marginTop: 12 }}
+            >
+              Continuer en mode invité
+            </button>
+          </form>
+        </div>
+      )}
 
       {showGuide && (
         <div style={styles.guideOverlay}>
@@ -2763,7 +2678,7 @@ export default function App() {
                 {headerFixe("ÉCHÉANCE", 5)}
                 {headerFixe("X", 6)}
                 {headerFixe("ACCUMULÉ", 7)}
-                {headerActionFixe()}
+                {headerFixe("ACTION", 8)}
                 <th style={styles.calendarTitle} colSpan={52}>
                   CALENDRIER POUR LES SEMAINES
                 </th>
@@ -2859,10 +2774,22 @@ export default function App() {
                                     <div style={styles.descriptionRowTools}>
                                       <button
                                         onClick={() => commencerEditionInfo(item)}
-                                        style={styles.descriptionEditButtonFull}
+                                        style={styles.descriptionEditButton}
                                         title="Cliquer pour modifier la catégorie / note"
                                       >
                                         {item.description || "-"}
+                                      </button>
+
+                                      <button
+                                        onClick={() => viderXLigne(item)}
+                                        style={{
+                                          ...styles.clearXRowButton,
+                                          opacity: nbX > 0 ? 1 : 0.45,
+                                        }}
+                                        title={nbX > 0 ? `Supprimer les ${nbX} X de cette ligne` : "Aucun X sur cette ligne"}
+                                        type="button"
+                                      >
+                                        🧹 X
                                       </button>
                                     </div>
                                   ),
@@ -3018,23 +2945,16 @@ export default function App() {
                                 )}
                                 {celluleFixe(nbX, 6, { verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(formatArgent(acc), 7, { ...styles.accumuleCell, verticalAlign: "middle" }, { rowSpan: 2 })}
-                                {celluleActionFixe(
-                                  <div style={styles.actionUltraGroup}>
-                                    <button
-                                      onClick={() => viderXLigne(item)}
-                                      style={{...styles.actionClearXButton, opacity: nbX > 0 ? 1 : 0.42, cursor: nbX > 0 ? "pointer" : "not-allowed"}}
-                                      title={nbX > 0 ? `Effacer les ${nbX} X de cette ligne` : "Aucun X à effacer"}
-                                      type="button"
-                                      disabled={nbX === 0}
-                                    >🧹</button>
-                                    <button
-                                      className="delete-row-button"
-                                      onClick={() => supprimerLigne(item)}
-                                      style={styles.actionDeleteButton}
-                                      title="Supprimer la ligne"
-                                      type="button"
-                                    >🗑️</button>
-                                  </div>,
+                                {celluleFixe(
+                                  <button
+                                    className="delete-row-button"
+                                    onClick={() => supprimerLigne(item)}
+                                    style={styles.deleteButton} title="Supprimer cette ligne"
+                                   title="Supprimer la ligne">
+                                    🗑️
+                                  </button>,
+                                  8,
+                                  { verticalAlign: "middle" },
                                   { rowSpan: 2 }
                                 )}
 
@@ -3118,7 +3038,7 @@ export default function App() {
                         {celluleFixe("", 5, styles.totalCell)}
                         {celluleFixe("", 6, styles.totalCell)}
                         {celluleFixe("", 7, styles.totalCell)}
-                        {celluleActionFixe("", {})}
+                        {celluleFixe("", 8, styles.totalCell)}
                         <td colSpan={53} style={styles.totalCalendar}></td>
                       </tr>
                     </Fragment>
@@ -3261,9 +3181,9 @@ const styles = {
   },
 
   bank3177FooterValue: {
-    minWidth: "128px",
+    minWidth: "150px",
     height: "38px",
-    padding: "0 10px",
+    padding: "0 14px",
     borderRadius: "12px",
     border: "1px solid #93c5fd",
     background: "#ffffff",
@@ -3288,9 +3208,9 @@ const styles = {
   bank3177Footer: {
     height: "64px",
     minHeight: "64px",
-    padding: "10px 14px",
+    padding: "10px 18px",
     display: "grid",
-    gridTemplateColumns: "31% 16% 29% 24%",
+    gridTemplateColumns: "31% 11% 47% 11%",
     alignItems: "center",
     gap: "0",
     background: "linear-gradient(180deg, #f8fafc 0%, #eaf3ff 100%)",
@@ -3644,27 +3564,10 @@ const styles = {
     whiteSpace: "nowrap",
     textAlign: "left",
   },
-  descriptionEditButtonFull: {
-    minHeight: "24px",
-    width: "100%",
-    padding: "2px 6px",
-    border: "1px solid rgba(15,23,42,0.18)",
-    background: "#ffffff",
-    color: "#0f172a",
-    borderRadius: "4px",
-    fontSize: "12px",
-    fontWeight: "650",
-    cursor: "pointer",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    textAlign: "left",
-  },
-
 
   clearXRowButton: {
-    minWidth: "82px",
-    height: "28px",
+    minWidth: "58px",
+    height: "26px",
     padding: "0 8px",
     borderRadius: "9px",
     border: "1px solid #bfdbfe",
@@ -5840,96 +5743,20 @@ const styles = {
     color: "#111827",
   },
 
-  actionUltraGroup: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "8px",
-    width: "100%",
-    minWidth: "118px",
-    whiteSpace: "nowrap",
-  },
-
-  actionHeaderCell: {
-    position: "sticky",
-    top: 0,
-    zIndex: 85,
-    background: "linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%)",
-    boxShadow: "2px 0 0 rgba(15,23,42,0.30)",
-  },
-
-  actionUltraStickyCell: {
-    background: "linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)",
-    zIndex: 230,
-    overflow: "visible",
-    textAlign: "center",
-    boxShadow: "2px 0 0 rgba(15,23,42,0.22), inset 0 1px 0 rgba(255,255,255,0.85)",
-  },
-
-  actionClearXButton: {
-    width: "42px",
-    minWidth: "42px",
-    height: "28px",
-    borderRadius: "9px",
-    border: "1px solid rgba(56,189,248,0.65)",
-    background: "linear-gradient(180deg, #ecfeff 0%, #dbeafe 100%)",
-    color: "#075985",
-    fontWeight: "900",
-    fontSize: "14px",
-    boxShadow: "0 0 12px rgba(56,189,248,0.22), inset 0 1px 0 rgba(255,255,255,0.90)",
-    transition: "transform 0.16s ease, filter 0.16s ease, opacity 0.16s ease",
-  },
-
-  actionDeleteButton: {
-    background: "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)",
-    color: "#ffffff",
-    border: "1px solid rgba(255,255,255,0.22)",
-    borderRadius: "9px",
-    width: "42px",
-    minWidth: "42px",
-    height: "28px",
-    cursor: "pointer",
-    fontSize: "14px",
-    fontWeight: "900",
-    lineHeight: "24px",
-    boxShadow: "0 0 14px rgba(239,68,68,0.34), inset 0 1px 0 rgba(255,255,255,0.25)",
-    opacity: 0.92,
-    transform: "scale(1)",
-    transition: "opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease",
-  },
-
-  rowActionButtons: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "6px",
-    width: "100%",
-    minWidth: "140px",
-    whiteSpace: "nowrap",
-  },
-
-  actionStickyCell: {
-    background: "#f8fbff",
-    zIndex: 160,
-    overflow: "visible",
-    boxShadow: "-2px 0 0 rgba(15,23,42,0.18), 2px 0 0 rgba(15,23,42,0.18)",
-  },
-
   deleteButton: {
     background: "linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)",
     color: "#ffffff",
     border: "1px solid rgba(255,255,255,0.22)",
     borderRadius: "9px",
     width: "34px",
-    minWidth: "34px",
     height: "28px",
     cursor: "pointer",
     fontSize: "15px",
     fontWeight: "900",
     lineHeight: "24px",
     boxShadow: "0 0 14px rgba(239,68,68,0.30), inset 0 1px 0 rgba(255,255,255,0.25)",
-    opacity: 0.82,
-    transform: "scale(1)",
+    opacity: 0,
+    transform: "scale(0.92)",
     transition: "opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease",
   },
 
