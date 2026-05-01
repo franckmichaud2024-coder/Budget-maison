@@ -14,6 +14,56 @@ const SNAPSHOT_KEY = "budget_maison_snapshots_v1";
 const RESET_PASSWORD = "1234"; // Change ce mot de passe ici
 // Login sécurisé via Supabase Auth
 
+const SESSION_MARKER_KEY = "budget_maison_session_active_v1";
+const SESSION_LAST_ACTIVITY_KEY = "budget_maison_last_activity_v1";
+const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes d'inactivité
+
+function nettoyerAncienneSessionSupabase() {
+  try {
+    const storages = [window.localStorage, window.sessionStorage];
+
+    storages.forEach((storage) => {
+      if (!storage) return;
+
+      Object.keys(storage).forEach((key) => {
+        const k = key.toLowerCase();
+        if (k.includes("supabase") || k.includes("sb-") || k.includes("auth-token")) {
+          storage.removeItem(key);
+        }
+      });
+    });
+  } catch (err) {
+    console.warn("Nettoyage session Supabase impossible:", err);
+  }
+}
+
+function marquerSessionActive() {
+  try {
+    window.sessionStorage.setItem(SESSION_MARKER_KEY, "true");
+    window.sessionStorage.setItem(SESSION_LAST_ACTIVITY_KEY, String(Date.now()));
+  } catch (err) {
+    console.warn("SessionStorage indisponible:", err);
+  }
+}
+
+function sessionNavigateurActive() {
+  try {
+    return window.sessionStorage.getItem(SESSION_MARKER_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function sessionExpiree() {
+  try {
+    const last = Number(window.sessionStorage.getItem(SESSION_LAST_ACTIVITY_KEY) || 0);
+    if (!last) return false;
+    return Date.now() - last > SESSION_TIMEOUT_MS;
+  } catch {
+    return false;
+  }
+}
+
 function lireSnapshots() {
   try {
     const brut = localStorage.getItem(SNAPSHOT_KEY);
@@ -619,24 +669,64 @@ export default function App() {
     let mounted = true;
 
     async function verifierSession() {
-      const { data } = await supabase.auth.getSession();
+      try {
+        // Mode sécurité : une session de navigateur doit exister.
+        // Si Chrome a été fermé ou si une vieille session localStorage existe, on revient au login.
+        if (!sessionNavigateurActive() || sessionExpiree()) {
+          nettoyerAncienneSessionSupabase();
+          await supabase.auth.signOut({ scope: "local" });
 
-      if (mounted) {
-        setSession(data.session);
-        setAuthLoading(false);
+          if (mounted) {
+            setSession(null);
+            setAuthLoading(false);
+          }
+
+          return;
+        }
+
+        const { data } = await supabase.auth.getSession();
+
+        if (mounted) {
+          setSession(data.session);
+          setAuthLoading(false);
+        }
+      } catch (err) {
+        console.error("Erreur vérification session:", err);
+
+        if (mounted) {
+          setSession(null);
+          setAuthLoading(false);
+        }
       }
     }
 
     verifierSession();
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      if (newSession) {
+        marquerSessionActive();
+      }
+
       setSession(newSession);
       setAuthLoading(false);
     });
 
+    const refreshActivity = () => {
+      if (sessionNavigateurActive()) {
+        marquerSessionActive();
+      }
+    };
+
+    window.addEventListener("click", refreshActivity);
+    window.addEventListener("keydown", refreshActivity);
+    window.addEventListener("mousemove", refreshActivity);
+
     return () => {
       mounted = false;
       listener.subscription.unsubscribe();
+      window.removeEventListener("click", refreshActivity);
+      window.removeEventListener("keydown", refreshActivity);
+      window.removeEventListener("mousemove", refreshActivity);
     };
   }, []);
 
@@ -961,12 +1051,14 @@ export default function App() {
       return;
     }
 
+    marquerSessionActive();
     setSession(data.session);
     setLoginPassword("");
   }
 
   async function seDeconnecter() {
-    await supabase.auth.signOut();
+    nettoyerAncienneSessionSupabase();
+    await supabase.auth.signOut({ scope: "local" });
     setSession(null);
     setLoginEmail("");
     setLoginPassword("");
@@ -1818,16 +1910,12 @@ export default function App() {
           </div>
 
           <div style={styles.bank3177Footer}>
-            <div style={styles.bank3177FooterSpacer}></div>
-
-            <div style={styles.bank3177FooterMetric}>
+            <div style={{ ...styles.bank3177FooterMetric, ...styles.bank3177FooterGains }}>
               <span style={styles.bank3177FooterLabel}>Gains</span>
               <strong style={styles.bank3177FooterValue}>{formatArgent(totalGains)}</strong>
             </div>
 
-            <div style={styles.bank3177FooterSpacer}></div>
-
-            <div style={styles.bank3177FooterMetric}>
+            <div style={{ ...styles.bank3177FooterMetric, ...styles.bank3177FooterSolde }}>
               <span style={styles.bank3177FooterLabel}>Solde total</span>
               <strong style={styles.bank3177FooterValue}>{formatArgent(totalSolde)}</strong>
             </div>
@@ -2057,32 +2145,6 @@ export default function App() {
           100% { transform: translateX(120%); }
         }
 
-
-        @keyframes tradingPulse {
-          0%, 100% { box-shadow: 0 0 14px rgba(34,197,94,0.18), inset 0 1px 0 rgba(255,255,255,0.10); }
-          50% { box-shadow: 0 0 28px rgba(34,197,94,0.34), inset 0 1px 0 rgba(255,255,255,0.16); }
-        }
-
-        @keyframes marketLine {
-          0% { transform: translateX(-18%); opacity: 0.24; }
-          50% { opacity: 0.46; }
-          100% { transform: translateX(18%); opacity: 0.24; }
-        }
-
-        .budget-row {
-          transition: transform 0.16s ease, filter 0.16s ease;
-        }
-
-        .budget-row:hover {
-          transform: translateX(2px);
-          filter: brightness(1.015);
-        }
-
-        .budget-row:hover .delete-row-button {
-          opacity: 1 !important;
-          transform: scale(1) !important;
-        }
-
       `}</style>
 
       <div style={styles.page}>
@@ -2097,14 +2159,6 @@ export default function App() {
           <div style={styles.titleSmall}>Budget personnel · Interface PRO</div>
           <h1 style={styles.title}>DASHBOARD BUDGET MAISON</h1>
         </div>
-      </div>
-
-      <div style={styles.marketTickerBar}>
-        <span style={styles.marketTickerPositive}>● LIVE</span>
-        <span>Budget Maison</span>
-        <span style={styles.marketTickerPositive}>GAIN {formatArgent(totalRevenus)}</span>
-        <span style={styles.marketTickerNegative}>DÉPENSES {formatArgent(totalDepenses)}</span>
-        <span style={solde >= 0 ? styles.marketTickerPositive : styles.marketTickerNegative}>SOLDE {formatArgent(solde)}</span>
       </div>
 
       <div
@@ -2734,6 +2788,18 @@ export default function App() {
                                       >
                                         {item.description || "-"}
                                       </button>
+
+                                      <button
+                                        onClick={() => viderXLigne(item)}
+                                        style={{
+                                          ...styles.clearXRowButton,
+                                          opacity: nbX > 0 ? 1 : 0.45,
+                                        }}
+                                        title={nbX > 0 ? `Supprimer les ${nbX} X de cette ligne` : "Aucun X sur cette ligne"}
+                                        type="button"
+                                      >
+                                        🧹 X
+                                      </button>
                                     </div>
                                   ),
                                   0,
@@ -2889,31 +2955,15 @@ export default function App() {
                                 {celluleFixe(nbX, 6, { verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(formatArgent(acc), 7, { ...styles.accumuleCell, verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(
-                                  <div style={styles.rowActionButtons}>
-                                    <button
-                                      onClick={() => viderXLigne(item)}
-                                      style={{
-                                        ...styles.clearXRowButton,
-                                        opacity: nbX > 0 ? 1 : 0.38,
-                                      }}
-                                      title={nbX > 0 ? `Effacer les ${nbX} X de cette ligne` : "Aucun X à effacer"}
-                                      type="button"
-                                    >
-                                      🧹 X
-                                    </button>
-
-                                    <button
-                                      className="delete-row-button"
-                                      onClick={() => supprimerLigne(item)}
-                                      style={styles.deleteButton}
-                                      title="Supprimer la ligne"
-                                      type="button"
-                                    >
-                                      🗑️
-                                    </button>
-                                  </div>,
+                                  <button
+                                    className="delete-row-button"
+                                    onClick={() => supprimerLigne(item)}
+                                    style={styles.deleteButton} title="Supprimer cette ligne"
+                                   title="Supprimer la ligne">
+                                    🗑️
+                                  </button>,
                                   8,
-                                  { ...styles.actionStickyCell, verticalAlign: "middle" },
+                                  { verticalAlign: "middle" },
                                   { rowSpan: 2 }
                                 )}
 
@@ -2929,13 +2979,12 @@ export default function App() {
                                         ...styles.weekTopCell,
                                         background: payee
                                           ? isDepense
-                                            ? "linear-gradient(180deg, #ff3131 0%, #b91c1c 100%)"
-                                            : "linear-gradient(180deg, #22c55e 0%, #047857 100%)"
+                                            ? "#ff1b1b"
+                                            : "#0058ff"
                                           : isEcheance
-                                          ? "linear-gradient(180deg, #bbf7d0 0%, #86efac 100%)"
+                                          ? "#c6e0b4"
                                           : "#ffffff",
-                                        color: payee ? "#ffffff" : "#000",
-                                        boxShadow: payee ? "inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 8px rgba(34,197,94,0.22)" : "none",
+                                        color: payee ? "#000" : "#000",
                                         outline: "none",
                                       }}
                                     >
@@ -2971,10 +3020,10 @@ export default function App() {
                                         ...styles.weekCell,
                                         background: payee
                                           ? isDepense
-                                            ? "linear-gradient(180deg, #ff3131 0%, #b91c1c 100%)"
-                                            : "linear-gradient(180deg, #22c55e 0%, #047857 100%)"
+                                            ? "#ff1b1b"
+                                            : "#0058ff"
                                           : isEcheance
-                                          ? "linear-gradient(180deg, #bbf7d0 0%, #86efac 100%)"
+                                          ? "#c6e0b4"
                                           : "#ffffff",
                                         outline: "none",
                                       }}
@@ -3131,9 +3180,20 @@ const styles = {
   bank3177FooterMetric: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "flex-start",
     gap: "10px",
     minWidth: 0,
+    height: "100%",
+    padding: "0 10px",
+  },
+
+  bank3177FooterGains: {
+    gridColumn: "2 / 3",
+    justifyContent: "center",
+  },
+
+  bank3177FooterSolde: {
+    gridColumn: "4 / 5",
+    justifyContent: "center",
   },
 
   bank3177FooterSpacer: {
@@ -3141,19 +3201,20 @@ const styles = {
   },
 
   bank3177FooterValue: {
-    minWidth: "150px",
-    height: "38px",
+    minWidth: "155px",
+    height: "40px",
     padding: "0 14px",
     borderRadius: "12px",
-    border: "1px solid #93c5fd",
-    background: "#ffffff",
-    color: "#0f172a",
+    border: "1px solid rgba(56,189,248,0.75)",
+    background: "linear-gradient(180deg, #ffffff 0%, #eef7ff 100%)",
+    color: "#020617",
     fontSize: "18px",
-    fontWeight: "900",
+    fontWeight: "950",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "flex-end",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 14px rgba(15,23,42,0.10)",
+    fontVariantNumeric: "tabular-nums",
+    boxShadow: "0 0 18px rgba(56,189,248,0.24), inset 0 1px 0 rgba(255,255,255,0.95)",
   },
 
   bank3177FooterLabel: {
@@ -3166,16 +3227,16 @@ const styles = {
   },
 
   bank3177Footer: {
-    height: "64px",
-    minHeight: "64px",
-    padding: "10px 18px",
+    height: "70px",
+    minHeight: "70px",
+    padding: "10px 0",
     display: "grid",
     gridTemplateColumns: "31% 11% 47% 11%",
     alignItems: "center",
     gap: "0",
-    background: "linear-gradient(180deg, #f8fafc 0%, #eaf3ff 100%)",
-    borderTop: "1px solid #bfdbfe",
-    boxShadow: "0 -8px 18px rgba(15,23,42,0.08)",
+    background: "linear-gradient(180deg, #eaf3ff 0%, #dbeafe 100%)",
+    borderTop: "1px solid rgba(56,189,248,0.45)",
+    boxShadow: "0 -10px 24px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.75)",
   },
 
   bank3177BottomSpacer: {
@@ -3216,6 +3277,7 @@ const styles = {
     fontSize: "12px",
     padding: "0 6px",
     outline: "none",
+    fontVariantNumeric: "tabular-nums",
   },
 
   bank3177TdInput: {
@@ -3278,8 +3340,9 @@ const styles = {
     padding: "5px 8px",
     color: "#0f172a",
     background: "#fdf4ff",
-    fontWeight: "700",
+    fontWeight: "900",
     textAlign: "right",
+    fontVariantNumeric: "tabular-nums",
   },
 
   bank3177TdMoney: {
@@ -3400,15 +3463,16 @@ const styles = {
   },
 
   bank3177Shell: {
-    width: "min(1560px, calc(100vw - 32px))",
-    height: "calc(100vh - 345px)",
-    minHeight: "340px",
+    width: "calc(100vw - 24px)",
+    maxWidth: "none",
+    height: "calc(100vh - 305px)",
+    minHeight: "390px",
     margin: "0 auto",
     borderRadius: "18px",
-    border: "1px solid rgba(147,197,253,0.28)",
+    border: "1px solid rgba(147,197,253,0.42)",
     background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)",
     overflow: "hidden",
-    boxShadow: "0 18px 46px rgba(0,0,0,0.30)",
+    boxShadow: "0 18px 48px rgba(0,0,0,0.38), 0 0 34px rgba(56,189,248,0.13)",
     display: "flex",
     flexDirection: "column",
   },
@@ -3525,33 +3589,18 @@ const styles = {
     textAlign: "left",
   },
 
-  rowActionButtons: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "8px",
-    height: "100%",
-    padding: "0 6px",
-  },
-
-  actionStickyCell: {
-    background: "linear-gradient(180deg, #ecfeff 0%, #f0fdf4 100%)",
-    borderLeft: "1px solid rgba(34,197,94,0.22)",
-    boxShadow: "2px 0 0 rgba(15,23,42,0.20), inset 0 0 18px rgba(34,197,94,0.06)",
-  },
-
   clearXRowButton: {
-    minWidth: "74px",
-    height: "28px",
+    minWidth: "58px",
+    height: "26px",
     padding: "0 8px",
-    borderRadius: "999px",
-    border: "1px solid rgba(34,197,94,0.42)",
-    background: "linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%)",
-    color: "#065f46",
-    fontWeight: "950",
+    borderRadius: "9px",
+    border: "1px solid #bfdbfe",
+    background: "#eff6ff",
+    color: "#334155",
+    fontWeight: "650",
     fontSize: "11px",
     cursor: "pointer",
-    boxShadow: "0 0 12px rgba(34,197,94,0.16), inset 0 1px 0 rgba(255,255,255,0.85)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
     whiteSpace: "nowrap",
   },
 
@@ -3729,15 +3778,15 @@ const styles = {
 
   compactProToolbar: {
     width: "min(1840px, calc(100vw - 20px))",
-    margin: "0 auto 8px",
-    padding: "9px",
+    margin: "0 auto 6px",
+    padding: "8px",
     display: "flex",
     alignItems: "center",
     gap: "10px",
-    borderRadius: "20px",
-    background: "linear-gradient(135deg, rgba(2,6,23,0.95), rgba(6,35,30,0.76), rgba(15,23,42,0.78))",
-    border: "1px solid rgba(34,197,94,0.28)",
-    boxShadow: "0 14px 42px rgba(0,0,0,0.34), 0 0 26px rgba(34,197,94,0.10), 0 0 22px rgba(34,211,238,0.08), inset 0 1px 0 rgba(255,255,255,0.08)",
+    borderRadius: "18px",
+    background: "linear-gradient(135deg, rgba(8,22,40,0.90), rgba(15,23,42,0.68))",
+    border: "1px solid rgba(56,189,248,0.22)",
+    boxShadow: "0 14px 38px rgba(0,0,0,0.28), 0 0 22px rgba(34,211,238,0.08), inset 0 1px 0 rgba(255,255,255,0.07)",
     overflow: "visible",
   },
 
@@ -4105,8 +4154,7 @@ const styles = {
 
   page: {
     minHeight: "100vh",
-    background:
-      "radial-gradient(circle at 16% 8%, rgba(16,185,129,0.20), transparent 28%), radial-gradient(circle at 86% 10%, rgba(14,165,233,0.18), transparent 26%), linear-gradient(135deg, #020617 0%, #07111f 45%, #000814 100%)",
+    background: "#020817",
     color: "#e5e7eb",
     paddingTop: "88px",
     paddingBottom: "132px",
@@ -4115,10 +4163,10 @@ const styles = {
 
   title: {
     margin: 0,
-    fontSize: "34px",
-    letterSpacing: "4.5px",
+    fontSize: "32px",
+    letterSpacing: "4px",
     color: "#f8fafc",
-    textShadow: "0 0 18px rgba(34,197,94,0.28), 0 0 30px rgba(56,189,248,0.20), 0 2px 0 #000",
+    textShadow: "0 0 20px rgba(56,189,248,0.25), 0 2px 0 #000",
     lineHeight: 1.05,
     whiteSpace: "nowrap",
   },
@@ -4186,52 +4234,18 @@ const styles = {
   },
 
 
-  marketTickerBar: {
-    width: "min(920px, calc(100vw - 28px))",
-    height: "34px",
-    margin: "-8px auto 14px",
-    padding: "0 14px",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "18px",
-    borderRadius: "999px",
-    background: "linear-gradient(90deg, rgba(2,6,23,0.88), rgba(6,78,59,0.42), rgba(2,6,23,0.88))",
-    border: "1px solid rgba(34,197,94,0.24)",
-    color: "#cbd5e1",
-    fontSize: "11px",
-    fontWeight: "950",
-    letterSpacing: "1px",
-    textTransform: "uppercase",
-    boxShadow: "0 12px 26px rgba(0,0,0,0.22), 0 0 18px rgba(34,197,94,0.10)",
-    overflow: "hidden",
-  },
-
-  marketTickerPositive: {
-    color: "#86efac",
-    textShadow: "0 0 12px rgba(34,197,94,0.42)",
-    whiteSpace: "nowrap",
-  },
-
-  marketTickerNegative: {
-    color: "#fca5a5",
-    textShadow: "0 0 12px rgba(239,68,68,0.35)",
-    whiteSpace: "nowrap",
-  },
-
   titleHero: {
     width: "fit-content",
-    maxWidth: "760px",
+    maxWidth: "720px",
     margin: "0 auto 18px",
-    padding: "14px 28px",
+    padding: "14px 26px",
     display: "flex",
     alignItems: "center",
     gap: "14px",
-    background: "linear-gradient(135deg, rgba(2,6,23,0.98), rgba(6,35,30,0.84), rgba(8,22,40,0.92))",
-    border: "1px solid rgba(34,197,94,0.34)",
-    borderRadius: "24px",
-    boxShadow: "0 18px 55px rgba(0,0,0,0.42), 0 0 38px rgba(34,197,94,0.16), 0 0 22px rgba(14,165,233,0.12), inset 0 1px 0 rgba(255,255,255,0.12)",
-    animation: "tradingPulse 4.5s ease-in-out infinite",
+    background: "linear-gradient(135deg, rgba(8,22,40,0.96), rgba(15,23,42,0.76))",
+    border: "1px solid rgba(56,189,248,0.28)",
+    borderRadius: "22px",
+    boxShadow: "0 18px 55px rgba(0,0,0,0.38), 0 0 34px rgba(14,165,233,0.12), inset 0 1px 0 rgba(255,255,255,0.10)",
   },
 
   titleIcon: {
@@ -4247,15 +4261,12 @@ const styles = {
   },
 
   titleSmall: {
-    color: "#86efac",
+    color: "#67e8f9",
     fontSize: "12px",
-    fontWeight: "950",
-    letterSpacing: "2.2px",
+    fontWeight: "900",
+    letterSpacing: "3px",
     textTransform: "uppercase",
-    borderBottom: "1px solid rgba(34,197,94,0.34)",
-    paddingBottom: "4px",
-    marginBottom: "6px",
-    textShadow: "0 0 14px rgba(34,197,94,0.34)",
+    marginBottom: "4px",
   },
 
   smartHelpBar: {
@@ -5600,16 +5611,14 @@ const styles = {
     position: "sticky",
     top: 0,
     zIndex: 50,
-    background: "linear-gradient(180deg, #064e3b 0%, #082f49 54%, #020617 100%)",
-    color: "#ecfeff",
-    fontWeight: "950",
+    background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
+    color: "#ffffff",
+    fontWeight: "800",
     fontSize: "12px",
-    padding: "7px 6px",
-    borderRight: "1px solid rgba(34,197,94,0.22)",
-    borderBottom: "1px solid rgba(34,197,94,0.30)",
+    padding: "6px",
+    borderRight: "1px solid rgba(15,23,42,0.22)",
     textAlign: "center",
     whiteSpace: "nowrap",
-    textShadow: "0 0 10px rgba(34,211,238,0.30)",
   },
 
   thSmall: {
@@ -5625,8 +5634,8 @@ const styles = {
     position: "sticky",
     top: 0,
     zIndex: 90,
-    background: "linear-gradient(180deg, #065f46 0%, #0f172a 100%)",
-    boxShadow: "2px 0 0 rgba(34,197,94,0.28), 0 0 16px rgba(34,197,94,0.10)",
+    background: "linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%)",
+    boxShadow: "2px 0 0 rgba(15,23,42,0.30)",
   },
 
   stickySubHeader: {
@@ -5639,10 +5648,10 @@ const styles = {
 
   stickyCell: {
     position: "sticky",
-    background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+    background: "#ffffff",
     color: "#111827",
     zIndex: 70,
-    boxShadow: "2px 0 0 rgba(15,23,42,0.20), 7px 0 18px rgba(2,6,23,0.05)",
+    boxShadow: "2px 0 0 rgba(15,23,42,0.20)",
   },
 
   calendarTitle: {fontSize: "28px", fontWeight: "950", textTransform: "capitalize", textShadow: "0 2px 0 #000"},
@@ -5662,27 +5671,26 @@ const styles = {
   },
 
   blocRow: {
-    background: "linear-gradient(90deg, #dcfce7 0%, #bae6fd 50%, #dcfce7 100%)",
-    color: "#052e16",
-    fontWeight: "950",
+    background: "linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)",
+    color: "#0f172a",
+    fontWeight: "800",
     fontSize: "13px",
     textAlign: "center",
-    letterSpacing: "0.5px",
-    borderTop: "1px solid rgba(34,197,94,0.36)",
-    borderBottom: "1px solid rgba(14,165,233,0.36)",
-    textTransform: "uppercase",
+    letterSpacing: "0.2px",
+    borderTop: "1px solid #93c5fd",
+    borderBottom: "1px solid #93c5fd",
   },
 
   td: {
-    borderRight: "1px solid rgba(15, 23, 42, 0.14)",
-    borderBottom: "1px solid rgba(15, 23, 42, 0.14)",
+    borderRight: "1px solid rgba(15, 23, 42, 0.16)",
+    borderBottom: "1px solid rgba(15, 23, 42, 0.16)",
     padding: "4px 6px",
     height: "28px",
     textAlign: "center",
     color: "#0f172a",
     fontSize: "12px",
-    fontWeight: "650",
-    background: "linear-gradient(180deg, #ffffff 0%, #f9fbff 100%)",
+    fontWeight: "550",
+    background: "#ffffff",
   },
 
   tdLeft: {
@@ -5760,19 +5768,19 @@ const styles = {
   },
 
   deleteButton: {
-    background: "linear-gradient(180deg, #ef4444 0%, #7f1d1d 100%)",
+    background: "linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)",
     color: "#ffffff",
-    border: "1px solid rgba(248,113,113,0.42)",
-    borderRadius: "999px",
-    width: "32px",
+    border: "1px solid rgba(255,255,255,0.22)",
+    borderRadius: "9px",
+    width: "34px",
     height: "28px",
     cursor: "pointer",
-    fontSize: "14px",
-    fontWeight: "950",
+    fontSize: "15px",
+    fontWeight: "900",
     lineHeight: "24px",
     boxShadow: "0 0 14px rgba(239,68,68,0.30), inset 0 1px 0 rgba(255,255,255,0.25)",
-    opacity: 0.82,
-    transform: "scale(0.96)",
+    opacity: 0,
+    transform: "scale(0.92)",
     transition: "opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease",
   },
 
