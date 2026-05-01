@@ -178,7 +178,7 @@ const colonnesFixes = [
   { key: "echeance", width: 90 },
   { key: "x", width: 45 },
   { key: "accumule", width: 105 },
-  { key: "action", width: 95 },
+  { key: "action", width: 155 },
 ];
 
 function leftOffset(index) {
@@ -260,11 +260,10 @@ function getJoursCalendrier(date = new Date()) {
 
 export default function App() {
   const [session, setSession] = useState(null);
-  const [authLoading, setAuthLoading] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
-  const [showLoginModal, setShowLoginModal] = useState(false);
 
   const tableScrollRef = useRef(null);
   const lastScrollRef = useRef(0);
@@ -319,6 +318,8 @@ export default function App() {
       return {};
     }
   });
+
+  const [input3177Actif, setInput3177Actif] = useState(null);
 
   const [showCalendarPanel, setShowCalendarPanel] = useState(false);
   const [calendarDate, setCalendarDate] = useState(new Date());
@@ -588,13 +589,6 @@ export default function App() {
   }
 
   async function loadData() {
-    // En mode invité, on affiche l'interface sans forcer une lecture Supabase.
-    // Les données sécurisées restent disponibles seulement quand Admin est connecté.
-    if (!session) {
-      setData([]);
-      return [];
-    }
-
     const compteSource =
       compteEstArgentAccumule(compteActif)
         ? trouverCompteParIntitule("Enveloppes")
@@ -626,30 +620,25 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
 
-    // MODE HYBRIDE : on ne bloque jamais le dashboard pendant la vérification Supabase.
-    // Si une session existe, on passe en admin. Sinon, l'app reste accessible en invité.
     async function verifierSession() {
-      try {
-        const { data } = await supabase.auth.getSession();
-        if (mounted) setSession(data?.session || null);
-      } catch (err) {
-        console.warn("Session Supabase non disponible, ouverture en mode invité.", err);
-        if (mounted) setSession(null);
-      } finally {
-        if (mounted) setAuthLoading(false);
+      const { data } = await supabase.auth.getSession();
+
+      if (mounted) {
+        setSession(data.session);
+        setAuthLoading(false);
       }
     }
 
     verifierSession();
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession || null);
+      setSession(newSession);
       setAuthLoading(false);
     });
 
     return () => {
       mounted = false;
-      listener?.subscription?.unsubscribe?.();
+      listener.subscription.unsubscribe();
     };
   }, []);
 
@@ -657,7 +646,7 @@ export default function App() {
     loadBlocs();
     loadData();
     setSnapshots(lireSnapshots());
-  }, [compteActif, session]);
+  }, [compteActif]);
 
   useEffect(() => {
     const timer = setInterval(() => setNowLive(new Date()), 60000);
@@ -976,7 +965,6 @@ export default function App() {
 
     setSession(data.session);
     setLoginPassword("");
-    setShowLoginModal(false);
   }
 
   async function seDeconnecter() {
@@ -984,7 +972,6 @@ export default function App() {
     setSession(null);
     setLoginEmail("");
     setLoginPassword("");
-    setShowLoginModal(false);
   }
 
 
@@ -1653,8 +1640,9 @@ export default function App() {
   }
 
   function modifierValeur3177(id, champ, valeur) {
-    const numericValue = String(valeur).replace(",", ".");
-    const cleanValue = numericValue === "" ? "" : round2(numericValue);
+    const numericValue = String(valeur ?? "").replace(",", ".").trim();
+    const nombre = numericValue === "" ? 0 : Number(numericValue);
+    const cleanValue = Number.isFinite(nombre) ? round2(nombre) : 0;
 
     const nextValues = {
       ...valeurs3177,
@@ -1709,18 +1697,27 @@ export default function App() {
   }
 
   function renduInput3177(ligne, champ, valeur, align = "right") {
+    const inputKey = `${ligne.id}-${champ}`;
     const valeurSauvee = valeurs3177?.[ligne.id]?.[champ];
+    const valeurBrute =
+      valeurSauvee === undefined || valeurSauvee === null || valeurSauvee === ""
+        ? valeur
+        : valeurSauvee;
 
     const valeurAffichee =
-      valeurSauvee === undefined || valeurSauvee === null
-        ? Number(valeur || 0).toFixed(2)
-        : String(valeurSauvee);
+      input3177Actif === inputKey
+        ? String(valeurBrute ?? "")
+        : Number(valeurBrute || 0).toFixed(2);
 
     return (
       <input
         type="text"
         inputMode="decimal"
         value={valeurAffichee}
+        onFocus={(e) => {
+          setInput3177Actif(inputKey);
+          requestAnimationFrame(() => e.target.select());
+        }}
         onChange={(e) => {
           const texte = e.target.value.replace(",", ".");
           if (/^-?\d*\.?\d*$/.test(texte)) {
@@ -1734,7 +1731,10 @@ export default function App() {
             sauvegarderValeurs3177(nextValues);
           }
         }}
-        onBlur={(e) => modifierValeur3177(ligne.id, champ, e.target.value)}
+        onBlur={(e) => {
+          modifierValeur3177(ligne.id, champ, e.target.value);
+          setInput3177Actif(null);
+        }}
         style={{
           ...styles.bank3177Input,
           textAlign: align,
@@ -1875,7 +1875,7 @@ export default function App() {
   const afficherTableauDetaille = compteEstEnveloppes(compteActif);
 
 
-  if (false && authLoading) {
+  if (authLoading) {
     return (
       <div style={styles.loginPage}>
         <div style={styles.loginCard}>
@@ -1886,7 +1886,7 @@ export default function App() {
     );
   }
 
-  if (false && !session) {
+  if (!session) {
     return (
       <>
         <style>{`
@@ -2083,7 +2083,7 @@ export default function App() {
               <div style={styles.bankCardScan}></div>
             </div>
         <div>
-          <div style={styles.titleSmall}>Budget personnel · Interface PRO · {session ? "Admin connecté" : "Mode invité"}</div>
+          <div style={styles.titleSmall}>Budget personnel · Interface PRO</div>
           <h1 style={styles.title}>DASHBOARD BUDGET MAISON</h1>
         </div>
       </div>
@@ -2180,18 +2180,7 @@ export default function App() {
         title="Glisse cette barre pour la déplacer"
       >
         <div style={styles.miniDockHandle}>☰ Utilisateur</div>
-        {session ? (
-          <div style={styles.userBadge}>🟢 {session.user.email}</div>
-        ) : (
-          <button
-            onClick={() => setShowLoginModal(true)}
-            style={styles.cleanButton}
-            type="button"
-            title="Connexion admin"
-          >
-            👤 Mode invité
-          </button>
-        )}
+        <div style={styles.userBadge}>🟢 {session?.user?.email}</div>
       </div>
 
       <div
@@ -2241,63 +2230,10 @@ export default function App() {
           Réinitialiser
         </button>
 
-        {session ? (
-          <button onClick={seDeconnecter} style={styles.cleanLogoutButton} type="button">
-            Déconnexion
-          </button>
-        ) : (
-          <button onClick={() => setShowLoginModal(true)} style={styles.cleanLogoutButton} type="button">
-            Admin
-          </button>
-        )}
+        <button onClick={seDeconnecter} style={styles.cleanLogoutButton} type="button">
+          Déconnexion
+        </button>
       </div>
-
-      {showLoginModal && !session && (
-        <div style={styles.guideOverlay}>
-          <form onSubmit={seConnecter} style={{ ...styles.loginCard, width: 430, maxWidth: "92vw" }}>
-            <div style={styles.loginGlow}></div>
-            <div style={styles.loginTitle}>CONNEXION ADMIN</div>
-            <div style={styles.loginSubtitle}>
-              Mode hybride actif — le dashboard reste accessible en invité.
-            </div>
-
-            <label style={styles.loginLabel}>Courriel</label>
-            <input
-              type="email"
-              value={loginEmail}
-              onChange={(e) => setLoginEmail(e.target.value)}
-              style={styles.loginInput}
-              autoFocus
-            />
-
-            <label style={styles.loginLabel}>Mot de passe</label>
-            <input
-              type="password"
-              value={loginPassword}
-              onChange={(e) => setLoginPassword(e.target.value)}
-              style={styles.loginInput}
-            />
-
-            {loginError && <div style={styles.loginError}>{loginError}</div>}
-
-            <button type="submit" style={styles.loginButton} disabled={authLoading}>
-              {authLoading ? "Connexion..." : "Se connecter admin"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setShowLoginModal(false);
-                setLoginError("");
-                setLoginPassword("");
-              }}
-              style={{ ...styles.cleanButton, width: "100%", marginTop: 12 }}
-            >
-              Continuer en mode invité
-            </button>
-          </form>
-        </div>
-      )}
 
       {showGuide && (
         <div style={styles.guideOverlay}>
@@ -2774,23 +2710,42 @@ export default function App() {
                                     <div style={styles.descriptionRowTools}>
                                       <button
                                         onClick={() => commencerEditionInfo(item)}
-                                        style={styles.descriptionEditButton}
+                                        style={styles.descriptionEditButtonFull}
                                         title="Cliquer pour modifier la catégorie / note"
                                       >
                                         {item.description || "-"}
                                       </button>
 
-                                      <button
-                                        onClick={() => viderXLigne(item)}
-                                        style={{
-                                          ...styles.clearXRowButton,
-                                          opacity: nbX > 0 ? 1 : 0.45,
-                                        }}
-                                        title={nbX > 0 ? `Supprimer les ${nbX} X de cette ligne` : "Aucun X sur cette ligne"}
-                                        type="button"
-                                      >
-                                        🧹 X
-                                      </button>
+                                      <div style={styles.descriptionActionCluster} title="Actions rapides de la ligne">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            viderXLigne(item);
+                                          }}
+                                          style={{
+                                            ...styles.descriptionClearXButton,
+                                            opacity: nbX > 0 ? 1 : 0.42,
+                                            cursor: nbX > 0 ? "pointer" : "not-allowed",
+                                          }}
+                                          title={nbX > 0 ? `Effacer les ${nbX} X de cette ligne` : "Aucun X à effacer"}
+                                          type="button"
+                                          disabled={nbX === 0}
+                                        >
+                                          🧹
+                                        </button>
+
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            supprimerLigne(item);
+                                          }}
+                                          style={styles.descriptionDeleteButton}
+                                          title="Supprimer la ligne"
+                                          type="button"
+                                        >
+                                          🗑️
+                                        </button>
+                                      </div>
                                     </div>
                                   ),
                                   0,
@@ -2946,15 +2901,24 @@ export default function App() {
                                 {celluleFixe(nbX, 6, { verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(formatArgent(acc), 7, { ...styles.accumuleCell, verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(
-                                  <button
-                                    className="delete-row-button"
-                                    onClick={() => supprimerLigne(item)}
-                                    style={styles.deleteButton} title="Supprimer cette ligne"
-                                   title="Supprimer la ligne">
-                                    🗑️
-                                  </button>,
+                                  <div style={styles.actionUltraGroup}>
+                                    <button
+                                      onClick={() => viderXLigne(item)}
+                                      style={{...styles.actionClearXButton, opacity: nbX > 0 ? 1 : 0.42, cursor: nbX > 0 ? "pointer" : "not-allowed"}}
+                                      title={nbX > 0 ? `Effacer les ${nbX} X de cette ligne` : "Aucun X à effacer"}
+                                      type="button"
+                                      disabled={nbX === 0}
+                                    >🧹</button>
+                                    <button
+                                      className="delete-row-button"
+                                      onClick={() => supprimerLigne(item)}
+                                      style={styles.actionDeleteButton}
+                                      title="Supprimer la ligne"
+                                      type="button"
+                                    >🗑️</button>
+                                  </div>,
                                   8,
-                                  { verticalAlign: "middle" },
+                                  { ...styles.actionUltraStickyCell, verticalAlign: "middle" },
                                   { rowSpan: 2 }
                                 )}
 
@@ -3181,9 +3145,9 @@ const styles = {
   },
 
   bank3177FooterValue: {
-    minWidth: "150px",
+    minWidth: "128px",
     height: "38px",
-    padding: "0 14px",
+    padding: "0 10px",
     borderRadius: "12px",
     border: "1px solid #93c5fd",
     background: "#ffffff",
@@ -3208,9 +3172,9 @@ const styles = {
   bank3177Footer: {
     height: "64px",
     minHeight: "64px",
-    padding: "10px 18px",
+    padding: "10px 14px",
     display: "grid",
-    gridTemplateColumns: "31% 11% 47% 11%",
+    gridTemplateColumns: "31% 16% 29% 24%",
     alignItems: "center",
     gap: "0",
     background: "linear-gradient(180deg, #f8fafc 0%, #eaf3ff 100%)",
@@ -3564,10 +3528,28 @@ const styles = {
     whiteSpace: "nowrap",
     textAlign: "left",
   },
+  descriptionEditButtonFull: {
+    minHeight: "24px",
+    flex: 1,
+    minWidth: 0,
+    padding: "2px 6px",
+    border: "1px solid rgba(15,23,42,0.18)",
+    background: "#ffffff",
+    color: "#0f172a",
+    borderRadius: "4px",
+    fontSize: "12px",
+    fontWeight: "650",
+    cursor: "pointer",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    textAlign: "left",
+  },
+
 
   clearXRowButton: {
-    minWidth: "58px",
-    height: "26px",
+    minWidth: "82px",
+    height: "28px",
     padding: "0 8px",
     borderRadius: "9px",
     border: "1px solid #bfdbfe",
@@ -3586,6 +3568,45 @@ const styles = {
     justifyContent: "space-between",
     gap: "8px",
     width: "100%",
+  },
+
+  descriptionActionCluster: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "5px",
+    flexShrink: 0,
+    padding: "2px 4px",
+    borderRadius: "999px",
+    background: "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(15,23,42,0.88))",
+    border: "1px solid rgba(56,189,248,0.38)",
+    boxShadow: "0 0 12px rgba(34,211,238,0.16), inset 0 1px 0 rgba(255,255,255,0.10)",
+  },
+
+  descriptionClearXButton: {
+    width: "28px",
+    height: "22px",
+    borderRadius: "999px",
+    border: "1px solid rgba(34,211,238,0.55)",
+    background: "linear-gradient(180deg, #0f172a 0%, #082f49 100%)",
+    color: "#67e8f9",
+    fontSize: "12px",
+    fontWeight: "900",
+    cursor: "pointer",
+    boxShadow: "0 0 10px rgba(34,211,238,0.25)",
+  },
+
+  descriptionDeleteButton: {
+    width: "28px",
+    height: "22px",
+    borderRadius: "999px",
+    border: "1px solid rgba(248,113,113,0.65)",
+    background: "linear-gradient(180deg, #7f1d1d 0%, #450a0a 100%)",
+    color: "#fecaca",
+    fontSize: "12px",
+    fontWeight: "900",
+    cursor: "pointer",
+    boxShadow: "0 0 10px rgba(239,68,68,0.28)",
   },
 
   compactAddButton: {
@@ -5743,20 +5764,88 @@ const styles = {
     color: "#111827",
   },
 
+  actionUltraGroup: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    width: "100%",
+    minWidth: "118px",
+    whiteSpace: "nowrap",
+  },
+
+  actionUltraStickyCell: {
+    background: "linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)",
+    zIndex: 230,
+    overflow: "visible",
+    textAlign: "center",
+    boxShadow: "2px 0 0 rgba(15,23,42,0.22), inset 0 1px 0 rgba(255,255,255,0.85)",
+  },
+
+  actionClearXButton: {
+    width: "42px",
+    minWidth: "42px",
+    height: "28px",
+    borderRadius: "9px",
+    border: "1px solid rgba(56,189,248,0.65)",
+    background: "linear-gradient(180deg, #ecfeff 0%, #dbeafe 100%)",
+    color: "#075985",
+    fontWeight: "900",
+    fontSize: "14px",
+    boxShadow: "0 0 12px rgba(56,189,248,0.22), inset 0 1px 0 rgba(255,255,255,0.90)",
+    transition: "transform 0.16s ease, filter 0.16s ease, opacity 0.16s ease",
+  },
+
+  actionDeleteButton: {
+    background: "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)",
+    color: "#ffffff",
+    border: "1px solid rgba(255,255,255,0.22)",
+    borderRadius: "9px",
+    width: "42px",
+    minWidth: "42px",
+    height: "28px",
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: "900",
+    lineHeight: "24px",
+    boxShadow: "0 0 14px rgba(239,68,68,0.34), inset 0 1px 0 rgba(255,255,255,0.25)",
+    opacity: 0.92,
+    transform: "scale(1)",
+    transition: "opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease",
+  },
+
+  rowActionButtons: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+    width: "100%",
+    minWidth: "140px",
+    whiteSpace: "nowrap",
+  },
+
+  actionStickyCell: {
+    background: "#f8fbff",
+    zIndex: 160,
+    overflow: "visible",
+    boxShadow: "-2px 0 0 rgba(15,23,42,0.18), 2px 0 0 rgba(15,23,42,0.18)",
+  },
+
   deleteButton: {
     background: "linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)",
     color: "#ffffff",
     border: "1px solid rgba(255,255,255,0.22)",
     borderRadius: "9px",
     width: "34px",
+    minWidth: "34px",
     height: "28px",
     cursor: "pointer",
     fontSize: "15px",
     fontWeight: "900",
     lineHeight: "24px",
     boxShadow: "0 0 14px rgba(239,68,68,0.30), inset 0 1px 0 rgba(255,255,255,0.25)",
-    opacity: 0,
-    transform: "scale(0.92)",
+    opacity: 0.82,
+    transform: "scale(1)",
     transition: "opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease",
   },
 
