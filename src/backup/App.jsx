@@ -178,7 +178,7 @@ const colonnesFixes = [
   { key: "echeance", width: 90 },
   { key: "x", width: 45 },
   { key: "accumule", width: 105 },
-  { key: "action", width: 120 },
+  { key: "action", width: 155 },
 ];
 
 function leftOffset(index) {
@@ -318,6 +318,7 @@ export default function App() {
       return {};
     }
   });
+
   const [input3177Actif, setInput3177Actif] = useState(null);
 
   const [showCalendarPanel, setShowCalendarPanel] = useState(false);
@@ -1639,8 +1640,9 @@ export default function App() {
   }
 
   function modifierValeur3177(id, champ, valeur) {
-    const numericValue = String(valeur).replace(",", ".");
-    const cleanValue = numericValue === "" ? "" : round2(Number(numericValue)).toFixed(2);
+    const numericValue = String(valeur ?? "").replace(",", ".").trim();
+    const nombre = numericValue === "" ? 0 : Number(numericValue);
+    const cleanValue = Number.isFinite(nombre) ? round2(nombre) : 0;
 
     const nextValues = {
       ...valeurs3177,
@@ -1695,24 +1697,27 @@ export default function App() {
   }
 
   function renduInput3177(ligne, champ, valeur, align = "right") {
-    const cleInput = `${ligne.id}-${champ}`;
+    const inputKey = `${ligne.id}-${champ}`;
     const valeurSauvee = valeurs3177?.[ligne.id]?.[champ];
-    const estActif = input3177Actif === cleInput;
+    const valeurBrute =
+      valeurSauvee === undefined || valeurSauvee === null || valeurSauvee === ""
+        ? valeur
+        : valeurSauvee;
 
-    const valeurAffichee = estActif
-      ? String(valeurSauvee ?? "")
-      : Number(
-          valeurSauvee === undefined || valeurSauvee === null || valeurSauvee === ""
-            ? valeur || 0
-            : valeurSauvee
-        ).toFixed(2);
+    const valeurAffichee =
+      input3177Actif === inputKey
+        ? String(valeurBrute ?? "")
+        : Number(valeurBrute || 0).toFixed(2);
 
     return (
       <input
         type="text"
         inputMode="decimal"
         value={valeurAffichee}
-        onFocus={() => setInput3177Actif(cleInput)}
+        onFocus={(e) => {
+          setInput3177Actif(inputKey);
+          requestAnimationFrame(() => e.target.select());
+        }}
         onChange={(e) => {
           const texte = e.target.value.replace(",", ".");
           if (/^-?\d*\.?\d*$/.test(texte)) {
@@ -1828,12 +1833,16 @@ export default function App() {
           </div>
 
           <div style={styles.bank3177Footer}>
-            <div style={{ ...styles.bank3177FooterMetric, ...styles.bank3177FooterGains }}>
+            <div style={styles.bank3177FooterSpacer}></div>
+
+            <div style={styles.bank3177FooterMetric}>
               <span style={styles.bank3177FooterLabel}>Gains</span>
               <strong style={styles.bank3177FooterValue}>{formatArgent(totalGains)}</strong>
             </div>
 
-            <div style={{ ...styles.bank3177FooterMetric, ...styles.bank3177FooterSolde }}>
+            <div style={styles.bank3177FooterSpacer}></div>
+
+            <div style={styles.bank3177FooterMetric}>
               <span style={styles.bank3177FooterLabel}>Solde total</span>
               <strong style={styles.bank3177FooterValue}>{formatArgent(totalSolde)}</strong>
             </div>
@@ -2706,6 +2715,37 @@ export default function App() {
                                       >
                                         {item.description || "-"}
                                       </button>
+
+                                      <div style={styles.descriptionActionCluster} title="Actions rapides de la ligne">
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            viderXLigne(item);
+                                          }}
+                                          style={{
+                                            ...styles.descriptionClearXButton,
+                                            opacity: nbX > 0 ? 1 : 0.42,
+                                            cursor: nbX > 0 ? "pointer" : "not-allowed",
+                                          }}
+                                          title={nbX > 0 ? `Effacer les ${nbX} X de cette ligne` : "Aucun X à effacer"}
+                                          type="button"
+                                          disabled={nbX === 0}
+                                        >
+                                          🧹
+                                        </button>
+
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            supprimerLigne(item);
+                                          }}
+                                          style={styles.descriptionDeleteButton}
+                                          title="Supprimer la ligne"
+                                          type="button"
+                                        >
+                                          🗑️
+                                        </button>
+                                      </div>
                                     </div>
                                   ),
                                   0,
@@ -2861,31 +2901,24 @@ export default function App() {
                                 {celluleFixe(nbX, 6, { verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(formatArgent(acc), 7, { ...styles.accumuleCell, verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(
-                                  <div style={styles.actionButtonsWrap}>
+                                  <div style={styles.actionUltraGroup}>
                                     <button
                                       onClick={() => viderXLigne(item)}
-                                      style={{
-                                        ...styles.clearXActionButton,
-                                        opacity: nbX > 0 ? 1 : 0.5,
-                                      }}
-                                      title={nbX > 0 ? `Supprimer les ${nbX} X de cette ligne` : "Aucun X sur cette ligne"}
+                                      style={{...styles.actionClearXButton, opacity: nbX > 0 ? 1 : 0.42, cursor: nbX > 0 ? "pointer" : "not-allowed"}}
+                                      title={nbX > 0 ? `Effacer les ${nbX} X de cette ligne` : "Aucun X à effacer"}
                                       type="button"
-                                    >
-                                      🧹 X
-                                    </button>
-
+                                      disabled={nbX === 0}
+                                    >🧹</button>
                                     <button
                                       className="delete-row-button"
                                       onClick={() => supprimerLigne(item)}
-                                      style={styles.deleteButton}
-                                      title="Supprimer cette ligne"
+                                      style={styles.actionDeleteButton}
+                                      title="Supprimer la ligne"
                                       type="button"
-                                    >
-                                      🗑️
-                                    </button>
+                                    >🗑️</button>
                                   </div>,
                                   8,
-                                  { ...styles.actionStickyCell, verticalAlign: "middle" },
+                                  { ...styles.actionUltraStickyCell, verticalAlign: "middle" },
                                   { rowSpan: 2 }
                                 )}
 
@@ -3102,23 +3135,9 @@ const styles = {
   bank3177FooterMetric: {
     display: "flex",
     alignItems: "center",
+    justifyContent: "flex-start",
     gap: "10px",
     minWidth: 0,
-    height: "100%",
-    padding: "0 10px",
-  },
-
-  bank3177FooterGains: {
-    gridColumn: "2 / 3",
-    justifyContent: "center",
-    justifySelf: "center",
-  },
-
-  bank3177FooterSolde: {
-    gridColumn: "4 / 5",
-    justifyContent: "center",
-    justifySelf: "center",
-    transform: "translateX(-18px)",
   },
 
   bank3177FooterSpacer: {
@@ -3126,42 +3145,41 @@ const styles = {
   },
 
   bank3177FooterValue: {
-    minWidth: "155px",
-    height: "40px",
-    padding: "0 14px",
+    minWidth: "128px",
+    height: "38px",
+    padding: "0 10px",
     borderRadius: "12px",
-    border: "1px solid rgba(34,197,94,0.85)",
-    background: "linear-gradient(180deg, #071a12 0%, #020617 100%)",
-    color: "#86efac",
+    border: "1px solid #93c5fd",
+    background: "#ffffff",
+    color: "#0f172a",
     fontSize: "18px",
-    fontWeight: "950",
+    fontWeight: "900",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "flex-end",
-    fontVariantNumeric: "tabular-nums",
-    boxShadow: "0 0 20px rgba(34,197,94,0.35), inset 0 1px 0 rgba(255,255,255,0.16)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 14px rgba(15,23,42,0.10)",
   },
 
   bank3177FooterLabel: {
-    color: "#0f172a",
+    color: "#334155",
     fontSize: "12px",
-    fontWeight: "900",
+    fontWeight: "750",
     textTransform: "uppercase",
-    letterSpacing: "0.8px",
+    letterSpacing: "0.6px",
     whiteSpace: "nowrap",
   },
 
   bank3177Footer: {
-    height: "72px",
-    minHeight: "72px",
-    padding: "10px 22px 10px 0",
+    height: "64px",
+    minHeight: "64px",
+    padding: "10px 14px",
     display: "grid",
-    gridTemplateColumns: "31% 11% 47% 11%",
+    gridTemplateColumns: "31% 16% 29% 24%",
     alignItems: "center",
     gap: "0",
-    background: "linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)",
-    borderTop: "1px solid rgba(56,189,248,0.55)",
-    boxShadow: "0 -12px 28px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.75)",
+    background: "linear-gradient(180deg, #f8fafc 0%, #eaf3ff 100%)",
+    borderTop: "1px solid #bfdbfe",
+    boxShadow: "0 -8px 18px rgba(15,23,42,0.08)",
   },
 
   bank3177BottomSpacer: {
@@ -3195,15 +3213,13 @@ const styles = {
     width: "100%",
     height: "24px",
     borderRadius: "7px",
-    border: "1px solid #93c5fd",
-    background: "linear-gradient(180deg, #ffffff 0%, #f0f9ff 100%)",
-    color: "#020617",
-    fontWeight: "800",
+    border: "1px solid #bfdbfe",
+    background: "#f8fbff",
+    color: "#0f172a",
+    fontWeight: "550",
     fontSize: "12px",
     padding: "0 6px",
     outline: "none",
-    fontVariantNumeric: "tabular-nums",
-    boxShadow: "inset 0 1px 2px rgba(15,23,42,0.08)",
   },
 
   bank3177TdInput: {
@@ -3266,9 +3282,8 @@ const styles = {
     padding: "5px 8px",
     color: "#0f172a",
     background: "#fdf4ff",
-    fontWeight: "900",
+    fontWeight: "700",
     textAlign: "right",
-    fontVariantNumeric: "tabular-nums",
   },
 
   bank3177TdMoney: {
@@ -3389,16 +3404,15 @@ const styles = {
   },
 
   bank3177Shell: {
-    width: "calc(100vw - 12px)",
-    maxWidth: "none",
-    height: "calc(100vh - 305px)",
-    minHeight: "390px",
+    width: "min(1560px, calc(100vw - 32px))",
+    height: "calc(100vh - 345px)",
+    minHeight: "340px",
     margin: "0 auto",
-    borderRadius: "14px",
-    border: "1px solid rgba(147,197,253,0.42)",
+    borderRadius: "18px",
+    border: "1px solid rgba(147,197,253,0.28)",
     background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)",
     overflow: "hidden",
-    boxShadow: "0 18px 48px rgba(0,0,0,0.38), 0 0 34px rgba(56,189,248,0.13)",
+    boxShadow: "0 18px 46px rgba(0,0,0,0.30)",
     display: "flex",
     flexDirection: "column",
   },
@@ -3514,10 +3528,10 @@ const styles = {
     whiteSpace: "nowrap",
     textAlign: "left",
   },
-
   descriptionEditButtonFull: {
     minHeight: "24px",
-    width: "100%",
+    flex: 1,
+    minWidth: 0,
     padding: "2px 6px",
     border: "1px solid rgba(15,23,42,0.18)",
     background: "#ffffff",
@@ -3532,9 +3546,10 @@ const styles = {
     textAlign: "left",
   },
 
+
   clearXRowButton: {
-    minWidth: "58px",
-    height: "26px",
+    minWidth: "82px",
+    height: "28px",
     padding: "0 8px",
     borderRadius: "9px",
     border: "1px solid #bfdbfe",
@@ -3547,41 +3562,51 @@ const styles = {
     whiteSpace: "nowrap",
   },
 
-  clearXActionButton: {
-    minWidth: "62px",
-    height: "28px",
-    padding: "0 8px",
-    borderRadius: "9px",
-    border: "1px solid #bfdbfe",
-    background: "#eff6ff",
-    color: "#334155",
-    fontWeight: "750",
-    fontSize: "11px",
-    cursor: "pointer",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.78)",
-    whiteSpace: "nowrap",
-  },
-
-  actionButtonsWrap: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "6px",
-    width: "100%",
-  },
-
-  actionStickyCell: {
-    zIndex: 96,
-    background: "#f8fbff",
-    boxShadow: "2px 0 0 rgba(15,23,42,0.28), inset -1px 0 0 rgba(59,130,246,0.18)",
-  },
-
   descriptionRowTools: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
     gap: "8px",
     width: "100%",
+  },
+
+  descriptionActionCluster: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "5px",
+    flexShrink: 0,
+    padding: "2px 4px",
+    borderRadius: "999px",
+    background: "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(15,23,42,0.88))",
+    border: "1px solid rgba(56,189,248,0.38)",
+    boxShadow: "0 0 12px rgba(34,211,238,0.16), inset 0 1px 0 rgba(255,255,255,0.10)",
+  },
+
+  descriptionClearXButton: {
+    width: "28px",
+    height: "22px",
+    borderRadius: "999px",
+    border: "1px solid rgba(34,211,238,0.55)",
+    background: "linear-gradient(180deg, #0f172a 0%, #082f49 100%)",
+    color: "#67e8f9",
+    fontSize: "12px",
+    fontWeight: "900",
+    cursor: "pointer",
+    boxShadow: "0 0 10px rgba(34,211,238,0.25)",
+  },
+
+  descriptionDeleteButton: {
+    width: "28px",
+    height: "22px",
+    borderRadius: "999px",
+    border: "1px solid rgba(248,113,113,0.65)",
+    background: "linear-gradient(180deg, #7f1d1d 0%, #450a0a 100%)",
+    color: "#fecaca",
+    fontSize: "12px",
+    fontWeight: "900",
+    cursor: "pointer",
+    boxShadow: "0 0 10px rgba(239,68,68,0.28)",
   },
 
   compactAddButton: {
@@ -5739,19 +5764,87 @@ const styles = {
     color: "#111827",
   },
 
+  actionUltraGroup: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    width: "100%",
+    minWidth: "118px",
+    whiteSpace: "nowrap",
+  },
+
+  actionUltraStickyCell: {
+    background: "linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)",
+    zIndex: 230,
+    overflow: "visible",
+    textAlign: "center",
+    boxShadow: "2px 0 0 rgba(15,23,42,0.22), inset 0 1px 0 rgba(255,255,255,0.85)",
+  },
+
+  actionClearXButton: {
+    width: "42px",
+    minWidth: "42px",
+    height: "28px",
+    borderRadius: "9px",
+    border: "1px solid rgba(56,189,248,0.65)",
+    background: "linear-gradient(180deg, #ecfeff 0%, #dbeafe 100%)",
+    color: "#075985",
+    fontWeight: "900",
+    fontSize: "14px",
+    boxShadow: "0 0 12px rgba(56,189,248,0.22), inset 0 1px 0 rgba(255,255,255,0.90)",
+    transition: "transform 0.16s ease, filter 0.16s ease, opacity 0.16s ease",
+  },
+
+  actionDeleteButton: {
+    background: "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)",
+    color: "#ffffff",
+    border: "1px solid rgba(255,255,255,0.22)",
+    borderRadius: "9px",
+    width: "42px",
+    minWidth: "42px",
+    height: "28px",
+    cursor: "pointer",
+    fontSize: "14px",
+    fontWeight: "900",
+    lineHeight: "24px",
+    boxShadow: "0 0 14px rgba(239,68,68,0.34), inset 0 1px 0 rgba(255,255,255,0.25)",
+    opacity: 0.92,
+    transform: "scale(1)",
+    transition: "opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease",
+  },
+
+  rowActionButtons: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+    width: "100%",
+    minWidth: "140px",
+    whiteSpace: "nowrap",
+  },
+
+  actionStickyCell: {
+    background: "#f8fbff",
+    zIndex: 160,
+    overflow: "visible",
+    boxShadow: "-2px 0 0 rgba(15,23,42,0.18), 2px 0 0 rgba(15,23,42,0.18)",
+  },
+
   deleteButton: {
     background: "linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)",
     color: "#ffffff",
     border: "1px solid rgba(255,255,255,0.22)",
     borderRadius: "9px",
     width: "34px",
+    minWidth: "34px",
     height: "28px",
     cursor: "pointer",
     fontSize: "15px",
     fontWeight: "900",
     lineHeight: "24px",
     boxShadow: "0 0 14px rgba(239,68,68,0.30), inset 0 1px 0 rgba(255,255,255,0.25)",
-    opacity: 1,
+    opacity: 0.82,
     transform: "scale(1)",
     transition: "opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease",
   },

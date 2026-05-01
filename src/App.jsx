@@ -178,7 +178,7 @@ const colonnesFixes = [
   { key: "echeance", width: 90 },
   { key: "x", width: 45 },
   { key: "accumule", width: 105 },
-  { key: "action", width: 155 },
+  { key: "action", width: 95 },
 ];
 
 function leftOffset(index) {
@@ -318,8 +318,6 @@ export default function App() {
       return {};
     }
   });
-
-  const [input3177Actif, setInput3177Actif] = useState(null);
 
   const [showCalendarPanel, setShowCalendarPanel] = useState(false);
   const [calendarDate, setCalendarDate] = useState(new Date());
@@ -621,18 +619,34 @@ export default function App() {
     let mounted = true;
 
     async function verifierSession() {
-      const { data } = await supabase.auth.getSession();
+      // SÉCURITÉ MAX : on ne restaure jamais une ancienne session.
+      // Si la page a été fermée puis rouverte, l'utilisateur doit se reconnecter.
+      try {
+        await supabase.auth.signOut({ scope: "local" });
+      } catch (err) {
+        console.error("Déconnexion sécurisée au démarrage impossible:", err);
+      }
 
       if (mounted) {
-        setSession(data.session);
+        setSession(null);
         setAuthLoading(false);
       }
     }
 
     verifierSession();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession);
+    const { data: listener } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (!mounted) return;
+
+      // On accepte seulement une session créée pendant cette visite.
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") {
+        setSession(newSession);
+      }
+
+      if (event === "SIGNED_OUT") {
+        setSession(null);
+      }
+
       setAuthLoading(false);
     });
 
@@ -959,7 +973,8 @@ export default function App() {
     setAuthLoading(false);
 
     if (error) {
-      setLoginError("Courriel ou mot de passe incorrect.");
+      setLoginError(error.message || "Courriel ou mot de passe incorrect.");
+      console.error(error);
       return;
     }
 
@@ -1640,9 +1655,8 @@ export default function App() {
   }
 
   function modifierValeur3177(id, champ, valeur) {
-    const numericValue = String(valeur ?? "").replace(",", ".").trim();
-    const nombre = numericValue === "" ? 0 : Number(numericValue);
-    const cleanValue = Number.isFinite(nombre) ? round2(nombre) : 0;
+    const numericValue = String(valeur).replace(",", ".");
+    const cleanValue = numericValue === "" ? "" : round2(numericValue);
 
     const nextValues = {
       ...valeurs3177,
@@ -1697,27 +1711,18 @@ export default function App() {
   }
 
   function renduInput3177(ligne, champ, valeur, align = "right") {
-    const inputKey = `${ligne.id}-${champ}`;
     const valeurSauvee = valeurs3177?.[ligne.id]?.[champ];
-    const valeurBrute =
-      valeurSauvee === undefined || valeurSauvee === null || valeurSauvee === ""
-        ? valeur
-        : valeurSauvee;
 
     const valeurAffichee =
-      input3177Actif === inputKey
-        ? String(valeurBrute ?? "")
-        : Number(valeurBrute || 0).toFixed(2);
+      valeurSauvee === undefined || valeurSauvee === null
+        ? Number(valeur || 0).toFixed(2)
+        : String(valeurSauvee);
 
     return (
       <input
         type="text"
         inputMode="decimal"
         value={valeurAffichee}
-        onFocus={(e) => {
-          setInput3177Actif(inputKey);
-          requestAnimationFrame(() => e.target.select());
-        }}
         onChange={(e) => {
           const texte = e.target.value.replace(",", ".");
           if (/^-?\d*\.?\d*$/.test(texte)) {
@@ -1731,10 +1736,7 @@ export default function App() {
             sauvegarderValeurs3177(nextValues);
           }
         }}
-        onBlur={(e) => {
-          modifierValeur3177(ligne.id, champ, e.target.value);
-          setInput3177Actif(null);
-        }}
+        onBlur={(e) => modifierValeur3177(ligne.id, champ, e.target.value)}
         style={{
           ...styles.bank3177Input,
           textAlign: align,
@@ -2710,42 +2712,23 @@ export default function App() {
                                     <div style={styles.descriptionRowTools}>
                                       <button
                                         onClick={() => commencerEditionInfo(item)}
-                                        style={styles.descriptionEditButtonFull}
+                                        style={styles.descriptionEditButton}
                                         title="Cliquer pour modifier la catégorie / note"
                                       >
                                         {item.description || "-"}
                                       </button>
 
-                                      <div style={styles.descriptionActionCluster} title="Actions rapides de la ligne">
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            viderXLigne(item);
-                                          }}
-                                          style={{
-                                            ...styles.descriptionClearXButton,
-                                            opacity: nbX > 0 ? 1 : 0.42,
-                                            cursor: nbX > 0 ? "pointer" : "not-allowed",
-                                          }}
-                                          title={nbX > 0 ? `Effacer les ${nbX} X de cette ligne` : "Aucun X à effacer"}
-                                          type="button"
-                                          disabled={nbX === 0}
-                                        >
-                                          🧹
-                                        </button>
-
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            supprimerLigne(item);
-                                          }}
-                                          style={styles.descriptionDeleteButton}
-                                          title="Supprimer la ligne"
-                                          type="button"
-                                        >
-                                          🗑️
-                                        </button>
-                                      </div>
+                                      <button
+                                        onClick={() => viderXLigne(item)}
+                                        style={{
+                                          ...styles.clearXRowButton,
+                                          opacity: nbX > 0 ? 1 : 0.45,
+                                        }}
+                                        title={nbX > 0 ? `Supprimer les ${nbX} X de cette ligne` : "Aucun X sur cette ligne"}
+                                        type="button"
+                                      >
+                                        🧹 X
+                                      </button>
                                     </div>
                                   ),
                                   0,
@@ -2901,24 +2884,15 @@ export default function App() {
                                 {celluleFixe(nbX, 6, { verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(formatArgent(acc), 7, { ...styles.accumuleCell, verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(
-                                  <div style={styles.actionUltraGroup}>
-                                    <button
-                                      onClick={() => viderXLigne(item)}
-                                      style={{...styles.actionClearXButton, opacity: nbX > 0 ? 1 : 0.42, cursor: nbX > 0 ? "pointer" : "not-allowed"}}
-                                      title={nbX > 0 ? `Effacer les ${nbX} X de cette ligne` : "Aucun X à effacer"}
-                                      type="button"
-                                      disabled={nbX === 0}
-                                    >🧹</button>
-                                    <button
-                                      className="delete-row-button"
-                                      onClick={() => supprimerLigne(item)}
-                                      style={styles.actionDeleteButton}
-                                      title="Supprimer la ligne"
-                                      type="button"
-                                    >🗑️</button>
-                                  </div>,
+                                  <button
+                                    className="delete-row-button"
+                                    onClick={() => supprimerLigne(item)}
+                                    style={styles.deleteButton} title="Supprimer cette ligne"
+                                   title="Supprimer la ligne">
+                                    🗑️
+                                  </button>,
                                   8,
-                                  { ...styles.actionUltraStickyCell, verticalAlign: "middle" },
+                                  { verticalAlign: "middle" },
                                   { rowSpan: 2 }
                                 )}
 
@@ -3145,9 +3119,9 @@ const styles = {
   },
 
   bank3177FooterValue: {
-    minWidth: "128px",
+    minWidth: "150px",
     height: "38px",
-    padding: "0 10px",
+    padding: "0 14px",
     borderRadius: "12px",
     border: "1px solid #93c5fd",
     background: "#ffffff",
@@ -3172,9 +3146,9 @@ const styles = {
   bank3177Footer: {
     height: "64px",
     minHeight: "64px",
-    padding: "10px 14px",
+    padding: "10px 18px",
     display: "grid",
-    gridTemplateColumns: "31% 16% 29% 24%",
+    gridTemplateColumns: "31% 11% 47% 11%",
     alignItems: "center",
     gap: "0",
     background: "linear-gradient(180deg, #f8fafc 0%, #eaf3ff 100%)",
@@ -3528,28 +3502,10 @@ const styles = {
     whiteSpace: "nowrap",
     textAlign: "left",
   },
-  descriptionEditButtonFull: {
-    minHeight: "24px",
-    flex: 1,
-    minWidth: 0,
-    padding: "2px 6px",
-    border: "1px solid rgba(15,23,42,0.18)",
-    background: "#ffffff",
-    color: "#0f172a",
-    borderRadius: "4px",
-    fontSize: "12px",
-    fontWeight: "650",
-    cursor: "pointer",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    textAlign: "left",
-  },
-
 
   clearXRowButton: {
-    minWidth: "82px",
-    height: "28px",
+    minWidth: "58px",
+    height: "26px",
     padding: "0 8px",
     borderRadius: "9px",
     border: "1px solid #bfdbfe",
@@ -3568,45 +3524,6 @@ const styles = {
     justifyContent: "space-between",
     gap: "8px",
     width: "100%",
-  },
-
-  descriptionActionCluster: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "5px",
-    flexShrink: 0,
-    padding: "2px 4px",
-    borderRadius: "999px",
-    background: "linear-gradient(180deg, rgba(2,6,23,0.96), rgba(15,23,42,0.88))",
-    border: "1px solid rgba(56,189,248,0.38)",
-    boxShadow: "0 0 12px rgba(34,211,238,0.16), inset 0 1px 0 rgba(255,255,255,0.10)",
-  },
-
-  descriptionClearXButton: {
-    width: "28px",
-    height: "22px",
-    borderRadius: "999px",
-    border: "1px solid rgba(34,211,238,0.55)",
-    background: "linear-gradient(180deg, #0f172a 0%, #082f49 100%)",
-    color: "#67e8f9",
-    fontSize: "12px",
-    fontWeight: "900",
-    cursor: "pointer",
-    boxShadow: "0 0 10px rgba(34,211,238,0.25)",
-  },
-
-  descriptionDeleteButton: {
-    width: "28px",
-    height: "22px",
-    borderRadius: "999px",
-    border: "1px solid rgba(248,113,113,0.65)",
-    background: "linear-gradient(180deg, #7f1d1d 0%, #450a0a 100%)",
-    color: "#fecaca",
-    fontSize: "12px",
-    fontWeight: "900",
-    cursor: "pointer",
-    boxShadow: "0 0 10px rgba(239,68,68,0.28)",
   },
 
   compactAddButton: {
@@ -5764,88 +5681,20 @@ const styles = {
     color: "#111827",
   },
 
-  actionUltraGroup: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "8px",
-    width: "100%",
-    minWidth: "118px",
-    whiteSpace: "nowrap",
-  },
-
-  actionUltraStickyCell: {
-    background: "linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)",
-    zIndex: 230,
-    overflow: "visible",
-    textAlign: "center",
-    boxShadow: "2px 0 0 rgba(15,23,42,0.22), inset 0 1px 0 rgba(255,255,255,0.85)",
-  },
-
-  actionClearXButton: {
-    width: "42px",
-    minWidth: "42px",
-    height: "28px",
-    borderRadius: "9px",
-    border: "1px solid rgba(56,189,248,0.65)",
-    background: "linear-gradient(180deg, #ecfeff 0%, #dbeafe 100%)",
-    color: "#075985",
-    fontWeight: "900",
-    fontSize: "14px",
-    boxShadow: "0 0 12px rgba(56,189,248,0.22), inset 0 1px 0 rgba(255,255,255,0.90)",
-    transition: "transform 0.16s ease, filter 0.16s ease, opacity 0.16s ease",
-  },
-
-  actionDeleteButton: {
-    background: "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)",
-    color: "#ffffff",
-    border: "1px solid rgba(255,255,255,0.22)",
-    borderRadius: "9px",
-    width: "42px",
-    minWidth: "42px",
-    height: "28px",
-    cursor: "pointer",
-    fontSize: "14px",
-    fontWeight: "900",
-    lineHeight: "24px",
-    boxShadow: "0 0 14px rgba(239,68,68,0.34), inset 0 1px 0 rgba(255,255,255,0.25)",
-    opacity: 0.92,
-    transform: "scale(1)",
-    transition: "opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease",
-  },
-
-  rowActionButtons: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "6px",
-    width: "100%",
-    minWidth: "140px",
-    whiteSpace: "nowrap",
-  },
-
-  actionStickyCell: {
-    background: "#f8fbff",
-    zIndex: 160,
-    overflow: "visible",
-    boxShadow: "-2px 0 0 rgba(15,23,42,0.18), 2px 0 0 rgba(15,23,42,0.18)",
-  },
-
   deleteButton: {
     background: "linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)",
     color: "#ffffff",
     border: "1px solid rgba(255,255,255,0.22)",
     borderRadius: "9px",
     width: "34px",
-    minWidth: "34px",
     height: "28px",
     cursor: "pointer",
     fontSize: "15px",
     fontWeight: "900",
     lineHeight: "24px",
     boxShadow: "0 0 14px rgba(239,68,68,0.30), inset 0 1px 0 rgba(255,255,255,0.25)",
-    opacity: 0.82,
-    transform: "scale(1)",
+    opacity: 0,
+    transform: "scale(0.92)",
     transition: "opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease",
   },
 
