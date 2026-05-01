@@ -185,8 +185,12 @@ function leftOffset(index) {
   return colonnesFixes.slice(0, index).reduce((acc, col) => acc + col.width, 0);
 }
 
-function formatArgent(valeur) {
-  return `${Number(valeur || 0).toFixed(2)} $`;
+function round2(val) {
+  return Math.round((Number(val || 0) + Number.EPSILON) * 100) / 100;
+}
+
+function formatArgent(val) {
+  return `${round2(val).toFixed(2)} $`;
 }
 
 function normaliserBloc(valeur) {
@@ -262,6 +266,7 @@ export default function App() {
   const [loginError, setLoginError] = useState("");
 
   const tableScrollRef = useRef(null);
+  const lastScrollRef = useRef(0);
   const bottomScrollRef = useRef(null);
   const [scrollInfo, setScrollInfo] = useState({ left: 0, max: 1 });
   const [showResetModal, setShowResetModal] = useState(false);
@@ -300,12 +305,44 @@ export default function App() {
   const [tmMessage, setTmMessage] = useState("");
   const [ligneEdition, setLigneEdition] = useState(null);
   const [montantEdition, setMontantEdition] = useState("");
+  const [echeanceEdition, setEcheanceEdition] = useState(null);
+  const [echeanceEditionValue, setEcheanceEditionValue] = useState("");
+
   const [ligneEditionInfo, setLigneEditionInfo] = useState(null);
   const [descriptionEdition, setDescriptionEdition] = useState("");
   const [noteEdition, setNoteEdition] = useState("");
+  const [valeurs3177, setValeurs3177] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("budget_3177_valeurs") || "{}");
+    } catch {
+      return {};
+    }
+  });
+
+  const [input3177Actif, setInput3177Actif] = useState(null);
+
   const [showCalendarPanel, setShowCalendarPanel] = useState(false);
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [nowLive, setNowLive] = useState(new Date());
+  const [dockPositions, setDockPositions] = useState(() => {
+    const defaults = {
+      account: { x: 1030, y: 12 },
+      calendar: { x: 1030, y: 76 },
+      user: { x: 1210, y: 76 },
+      actions: { x: 1420, y: 76 },
+      security: { x: 1640, y: 76 },
+    };
+
+    try {
+      const saved = localStorage.getItem("budget-dock-positions-v2");
+      if (saved) return { ...defaults, ...JSON.parse(saved) };
+    } catch (err) {
+      // ignore
+    }
+
+    return defaults;
+  });
+
 
 
   function changerCompteActif(compte) {
@@ -336,24 +373,29 @@ export default function App() {
   async function renommerCompteActif() {
     setErreur("");
 
-    const nouveauNom = window.prompt(
-      "Nouveau nom du compte :",
-      compteActif
+    const numeroActuel = numeroCompte(compteActif);
+    const intituleFixe = intituleCompte(compteActif);
+
+    const nouveauNumero = window.prompt(
+      `Nouveau numéro pour le compte "${intituleFixe}" :`,
+      numeroActuel
     );
 
-    if (nouveauNom === null) return;
+    if (nouveauNumero === null) return;
 
-    const nomFinal = String(nouveauNom).trim();
+    const numeroFinal = String(nouveauNumero).replace(/[^0-9]/g, "").trim();
 
-    if (!nomFinal) {
-      setErreur("Le nom du compte ne peut pas être vide.");
+    if (!numeroFinal) {
+      setErreur("Le numéro du compte ne peut pas être vide.");
       return;
     }
+
+    const nomFinal = `${numeroFinal} - ${intituleFixe}`;
 
     if (nomFinal === compteActif) return;
 
     if (comptesBudget.includes(nomFinal)) {
-      setErreur("Ce compte existe déjà.");
+      setErreur("Ce numéro existe déjà pour un autre compte.");
       return;
     }
 
@@ -439,6 +481,41 @@ export default function App() {
     return couleurs[total % couleurs.length];
   }
 
+  function numeroCompte(compte) {
+    const match = String(compte || "").match(/^\s*(\d+)/);
+    return match ? match[1] : "";
+  }
+
+  function intituleCompte(compte) {
+    return String(compte || "")
+      .replace(/^\s*\d+\s*-\s*/, "")
+      .trim();
+  }
+
+  function composerCompte(numero, compteReference) {
+    const cleanNumero = String(numero || "").replace(/[^0-9]/g, "").trim();
+    const intitule = intituleCompte(compteReference);
+
+    if (!cleanNumero) return compteReference;
+    return `${cleanNumero} - ${intitule}`;
+  }
+
+  function compteEst(compte, intitule) {
+    return intituleCompte(compte).toLowerCase() === String(intitule).toLowerCase();
+  }
+
+  function compteEstEnveloppes(compte) {
+    return compteEst(compte, "Enveloppes");
+  }
+
+  function compteEstArgentAccumule(compte) {
+    return compteEst(compte, "Argent accumulé");
+  }
+
+  function trouverCompteParIntitule(intitule) {
+    return comptesBudget.find((compte) => compteEst(compte, intitule)) || "";
+  }
+
   function onDragStartCompte(compte) {
     setDragCompte(compte);
   }
@@ -461,19 +538,21 @@ export default function App() {
 
   function commencerEditionCompte(compte) {
     setCompteEdition(compte);
-    setCompteEditionValeur(compte);
+    setCompteEditionValeur(numeroCompte(compte));
   }
 
   async function validerRenameCompte() {
-    const nouveauNom = compteEditionValeur.trim();
+    const numeroFinal = String(compteEditionValeur || "").replace(/[^0-9]/g, "").trim();
 
-    if (!compteEdition || !nouveauNom) {
+    if (!compteEdition || !numeroFinal) {
       setCompteEdition(null);
       return;
     }
 
+    const nouveauNom = composerCompte(numeroFinal, compteEdition);
+
     if (nouveauNom !== compteEdition && comptesBudget.includes(nouveauNom)) {
-      setErreur("Ce compte existe déjà.");
+      setErreur("Ce numéro existe déjà pour un autre compte.");
       return;
     }
 
@@ -510,10 +589,15 @@ export default function App() {
   }
 
   async function loadData() {
+    const compteSource =
+      compteEstArgentAccumule(compteActif)
+        ? trouverCompteParIntitule("Enveloppes")
+        : compteActif;
+
     const { data, error } = await supabase
       .from("budget_transactions")
       .select("*")
-      .eq("compte", compteActif)
+      .eq("compte", compteSource)
       .order("bloc", { ascending: true })
       .order("date", { ascending: false });
 
@@ -525,7 +609,7 @@ export default function App() {
     const lignes = (data || []).map((item) => ({
       ...item,
       bloc: normaliserBloc(item.bloc || "SANS BLOC"),
-      compte: item.compte || compteActif,
+      compte: item.compte || compteSource,
       mode: normaliserMode(item.mode),
     }));
 
@@ -571,83 +655,79 @@ export default function App() {
 
   useEffect(() => {
     const table = tableScrollRef.current;
-    const bottom = bottomScrollRef.current;
-
-    if (!table || !bottom) return;
-
-    let verrou = false;
+    if (!table) return;
 
     const updateInfo = () => {
-      const max = Math.max(table.scrollWidth - table.clientWidth, 1);
-      setScrollInfo({ left: table.scrollLeft, max });
+      const max = Math.max(0, table.scrollWidth - table.clientWidth + 320);
+      setScrollInfo({
+        left: table.scrollLeft,
+        max,
+      });
     };
 
-    const syncFromTable = () => {
-      if (verrou) return;
-      verrou = true;
-      bottom.scrollLeft = table.scrollLeft;
-      updateInfo();
-      verrou = false;
-    };
-
-    const syncFromBottom = () => {
-      if (verrou) return;
-      verrou = true;
-      table.scrollLeft = bottom.scrollLeft;
-      updateInfo();
-      verrou = false;
-    };
-
-    table.addEventListener("scroll", syncFromTable);
-    bottom.addEventListener("scroll", syncFromBottom);
+    table.addEventListener("scroll", updateInfo, { passive: true });
     window.addEventListener("resize", updateInfo);
 
     updateInfo();
 
     return () => {
-      table.removeEventListener("scroll", syncFromTable);
-      bottom.removeEventListener("scroll", syncFromBottom);
+      table.removeEventListener("scroll", updateInfo);
       window.removeEventListener("resize", updateInfo);
     };
+  }, [data]);
+
+  useEffect(() => {
+    const el = tableScrollRef.current;
+    if (!el) return;
+
+    requestAnimationFrame(() => {
+      el.scrollLeft = lastScrollRef.current;
+    });
   }, [data]);
 
   function obtenirScrollers() {
     return {
       table: tableScrollRef.current,
-      bottom: bottomScrollRef.current,
     };
   }
 
   function bougerScroll(left) {
-    const { table, bottom } = obtenirScrollers();
+    const table = tableScrollRef.current;
     if (!table) return;
 
-    const max = Math.max(table.scrollWidth - table.clientWidth, 1);
+    // Calcul réel du scroll disponible.
+    // Le +220 donne un coussin visuel pour atteindre la dernière semaine complètement.
+    const max = Math.max(0, table.scrollWidth - table.clientWidth + 320);
+    if (max <= 0) return;
+
     const nextLeft = Math.max(0, Math.min(left, max));
 
+    lastScrollRef.current = nextLeft;
     table.scrollLeft = nextLeft;
-    if (bottom) bottom.scrollLeft = nextLeft;
 
-    setScrollInfo({ left: nextLeft, max });
+    setScrollInfo({
+      left: nextLeft,
+      max,
+    });
   }
 
   function scrollTableBy(px) {
     const { table } = obtenirScrollers();
     if (!table) return;
+
     bougerScroll(table.scrollLeft + px);
   }
 
   function scrollTableTo(position) {
-    const { table } = obtenirScrollers();
+    const table = tableScrollRef.current;
     if (!table) return;
 
-    const max = Math.max(table.scrollWidth - table.clientWidth, 1);
+    const max = Math.max(0, table.scrollWidth - table.clientWidth + 320);
 
     if (position === "start") bougerScroll(0);
     if (position === "middle") bougerScroll(max / 2);
     if (position === "end") bougerScroll(max);
   }
-
 
   function enregistrerSnapshot(action = "Sauvegarde automatique") {
     const copie = preparerSnapshotDepuisData(data);
@@ -1008,6 +1088,105 @@ export default function App() {
     loadData();
   }
 
+  function resetTransfertSiTousXEffaces(item) {
+    if (!item?.id) return;
+
+    let valeursActuelles = {};
+    try {
+      valeursActuelles = JSON.parse(localStorage.getItem("budget_3177_valeurs") || "{}");
+    } catch {
+      valeursActuelles = {};
+    }
+
+    if (!valeursActuelles[item.id]) return;
+
+    const nextValues = {
+      ...valeursActuelles,
+      [item.id]: {
+        ...valeursActuelles[item.id],
+        transfertEffectue: false,
+        montantTransfere: 0,
+        dateTransfert: null,
+      },
+    };
+
+    localStorage.setItem("budget_3177_valeurs", JSON.stringify(nextValues));
+    setValeurs3177(nextValues);
+  }
+
+  async function transfererChiffre(item) {
+    setErreur("");
+
+    const id = item.id;
+    const nbX = semainesPayees(item).length;
+    const montantATransferer = round2(montantAccumule(item));
+
+    if (!id) {
+      setErreur("Impossible de transférer : identifiant de ligne introuvable.");
+      return;
+    }
+
+    if (nbX < 52) {
+      setErreur(
+        `Transfert impossible pour "${item.description}". Tu dois avoir les 52 X avant de transférer. Actuellement : ${nbX}/52.`
+      );
+      return;
+    }
+
+    if (!montantATransferer || montantATransferer <= 0) {
+      setErreur("Aucun montant accumulé à transférer pour cette ligne.");
+      return;
+    }
+
+    let valeursActuelles = {};
+    try {
+      valeursActuelles = JSON.parse(localStorage.getItem("budget_3177_valeurs") || "{}");
+    } catch {
+      valeursActuelles = {};
+    }
+
+    const dejaTransfere = Boolean(valeursActuelles?.[id]?.transfertEffectue);
+
+    if (dejaTransfere) {
+      const dateTransfert = valeursActuelles?.[id]?.dateTransfert
+        ? new Date(valeursActuelles[id].dateTransfert).toLocaleString("fr-CA")
+        : "";
+
+      setErreur(
+        `Transfert déjà effectué pour "${item.description}". Pour retransférer, efface d'abord tous les X, puis remets les 52 X. ${dateTransfert ? "Date du transfert : " + dateTransfert : ""}`
+      );
+      return;
+    }
+
+    const gainDefaut = 0;
+    const gainActuelRaw = valeursActuelles?.[id]?.gains;
+
+    const gainActuel =
+      gainActuelRaw === undefined || gainActuelRaw === null || gainActuelRaw === ""
+        ? gainDefaut
+        : round2(Number(String(gainActuelRaw).replace(",", ".")) || 0);
+
+    const nouveauGain = round2(gainActuel + montantATransferer);
+
+    const nextValues = {
+      ...valeursActuelles,
+      [id]: {
+        ...(valeursActuelles[id] || {}),
+        gains: nouveauGain,
+        transfertEffectue: true,
+        montantTransfere: montantATransferer,
+        dateTransfert: new Date().toISOString(),
+      },
+    };
+
+    localStorage.setItem("budget_3177_valeurs", JSON.stringify(nextValues));
+    setValeurs3177(nextValues);
+
+    setErreur(
+      `Transfert effectué : ${formatArgent(montantATransferer)} ajouté au gain 3177 de "${item.description}". Pour retransférer, il faudra effacer tous les X et remettre les 52 X.`
+    );
+  }
+
   function separerDescriptionEtNote(item) {
     const texte = String(item.description || "");
     const morceaux = texte.split(" - ");
@@ -1138,6 +1317,49 @@ export default function App() {
     setMontantEdition("");
   }
 
+  function commencerEditionEcheance(item) {
+    setErreur("");
+    setEcheanceEdition(item.id);
+    setEcheanceEditionValue(String(item.echeance || ""));
+  }
+
+  function annulerEditionEcheance() {
+    setEcheanceEdition(null);
+    setEcheanceEditionValue("");
+  }
+
+  async function sauvegarderEcheance(item) {
+    setErreur("");
+
+    const nouvelleEcheance = Number(echeanceEditionValue);
+
+    if (!echeanceEditionValue || nouvelleEcheance < 1 || nouvelleEcheance > 52) {
+      setErreur("Entre une échéance valide entre 1 et 52.");
+      return;
+    }
+
+    enregistrerSnapshot(`Avant changement échéance : ${item.description}`);
+
+    const { error } = await supabase
+      .from("budget_transactions")
+      .update({ echeance: nouvelleEcheance })
+      .eq("id", item.id);
+
+    if (error) {
+      setErreur(error.message);
+      return;
+    }
+
+    setData((prev) =>
+      prev.map((row) =>
+        row.id === item.id ? { ...row, echeance: nouvelleEcheance } : row
+      )
+    );
+
+    setEcheanceEdition(null);
+    setEcheanceEditionValue("");
+  }
+
   async function toggleSemaine(item, semaine) {
     setErreur("");
 
@@ -1166,6 +1388,46 @@ export default function App() {
         row.id === item.id ? { ...row, semaines_payees: semainesListe } : row
       )
     );
+
+    if (semainesListe.length === 0) {
+      resetTransfertSiTousXEffaces(item);
+      setErreur(`Tous les X ont été effacés pour "${item.description}". Le transfert pourra être refait seulement après avoir remis les 52 X.`);
+    }
+  }
+
+  async function viderXLigne(item) {
+    setErreur("");
+
+    const nbXActuels = semainesPayees(item).length;
+
+    if (nbXActuels === 0) {
+      setErreur("Aucun X à supprimer sur cette ligne.");
+      return;
+    }
+
+    const ok = window.confirm(`Supprimer les ${nbXActuels} X de la ligne "${item.description}" ?`);
+    if (!ok) return;
+
+    enregistrerSnapshot(`Avant suppression des X : ${item.description}`);
+
+    const { error } = await supabase
+      .from("budget_transactions")
+      .update({ semaines_payees: [] })
+      .eq("id", item.id);
+
+    if (error) {
+      setErreur(error.message);
+      return;
+    }
+
+    setData((prev) =>
+      prev.map((row) =>
+        row.id === item.id ? { ...row, semaines_payees: [] } : row
+      )
+    );
+
+    resetTransfertSiTousXEffaces(item);
+    setErreur(`Tous les X ont été effacés pour "${item.description}". Le transfert pourra être refait seulement après avoir remis les 52 X.`);
   }
 
   async function supprimerLigne(item) {
@@ -1244,6 +1506,9 @@ export default function App() {
 
   const solde = totalRevenus - totalDepenses;
   const semaineActuelle = getWeekNumberISO(nowLive);
+  const weekHue = (semaineActuelle * 7) % 360;
+  const weekGlowColor = `hsl(${weekHue} 95% 58%)`;
+  const weekGlowSoft = `hsla(${weekHue}, 95%, 58%, 0.24)`;
   const jourActuelTexte = nowLive.toLocaleDateString("fr-CA", { weekday: "long" });
   const moisActuelTexte = nowLive.toLocaleDateString("fr-CA", { month: "long" });
   const joursCalendrier = getJoursCalendrier(calendarDate);
@@ -1258,6 +1523,89 @@ export default function App() {
     setEcheance(String(getWeekNumberISO(date)));
     setCalendarDate(date);
     setShowCalendarPanel(false);
+  }
+
+  function limiterPositionDock(position, largeurDock = 320, hauteurDock = 70) {
+    const maxX = Math.max(10, window.innerWidth - largeurDock - 10);
+    const maxY = Math.max(10, window.innerHeight - hauteurDock - 10);
+
+    return {
+      x: Math.min(Math.max(10, position.x), maxX),
+      y: Math.min(Math.max(10, position.y), maxY),
+    };
+  }
+
+  function sauvegarderPositionsDock(nextPositions) {
+    setDockPositions(nextPositions);
+    localStorage.setItem("budget-dock-positions-v2", JSON.stringify(nextPositions));
+  }
+
+  function resetPositionsDock() {
+    const defaults = {
+      account: { x: Math.max(10, window.innerWidth - 870), y: 12 },
+      calendar: { x: Math.max(10, window.innerWidth - 870), y: 76 },
+      user: { x: Math.max(10, window.innerWidth - 690), y: 76 },
+      actions: { x: Math.max(10, window.innerWidth - 470), y: 76 },
+      security: { x: Math.max(10, window.innerWidth - 250), y: 76 },
+    };
+
+    sauvegarderPositionsDock(defaults);
+  }
+
+  function demarrerDragDock(e, dockKey, options = {}) {
+    if (
+      e.target.tagName === "BUTTON" ||
+      e.target.tagName === "SELECT" ||
+      e.target.tagName === "INPUT"
+    ) {
+      return;
+    }
+
+    e.preventDefault();
+
+    const largeur = options.width || 320;
+    const hauteur = options.height || 70;
+    const departX = e.clientX;
+    const departY = e.clientY;
+    const positionDepart = dockPositions[dockKey] || { x: 10, y: 10 };
+
+    function bouger(ev) {
+      const nextPosition = limiterPositionDock(
+        {
+          x: positionDepart.x + (ev.clientX - departX),
+          y: positionDepart.y + (ev.clientY - departY),
+        },
+        largeur,
+        hauteur
+      );
+
+      setDockPositions((prev) => ({
+        ...prev,
+        [dockKey]: nextPosition,
+      }));
+    }
+
+    function finir(ev) {
+      const nextPosition = limiterPositionDock(
+        {
+          x: positionDepart.x + (ev.clientX - departX),
+          y: positionDepart.y + (ev.clientY - departY),
+        },
+        largeur,
+        hauteur
+      );
+
+      sauvegarderPositionsDock({
+        ...dockPositions,
+        [dockKey]: nextPosition,
+      });
+
+      window.removeEventListener("mousemove", bouger);
+      window.removeEventListener("mouseup", finir);
+    }
+
+    window.addEventListener("mousemove", bouger);
+    window.addEventListener("mouseup", finir);
   }
 
 
@@ -1279,6 +1627,231 @@ export default function App() {
     );
   }
 
+  function sauvegarderValeurs3177(nextValues) {
+    setValeurs3177(nextValues);
+    localStorage.setItem("budget_3177_valeurs", JSON.stringify(nextValues));
+  }
+
+  function lireValeur3177(id, champ, defaut = 0) {
+    const valeur = valeurs3177?.[id]?.[champ];
+    return valeur === undefined || valeur === null || valeur === ""
+      ? round2(defaut)
+      : round2(Number(valeur) || 0);
+  }
+
+  function modifierValeur3177(id, champ, valeur) {
+    const numericValue = String(valeur ?? "").replace(",", ".").trim();
+    const nombre = numericValue === "" ? 0 : Number(numericValue);
+    const cleanValue = Number.isFinite(nombre) ? round2(nombre) : 0;
+
+    const nextValues = {
+      ...valeurs3177,
+      [id]: {
+        ...(valeurs3177[id] || {}),
+        [champ]: cleanValue,
+      },
+    };
+
+    sauvegarderValeurs3177(nextValues);
+  }
+
+  function construireTableau3177() {
+    // IMPORTANT :
+    // Le 3177 doit afficher exactement les mêmes lignes que le tableau visible du 3185.
+    // On filtre donc avec BLOCS_FIXES, puis on garde l'ordre par bloc comme dans groupesFiltres.
+    const lignesVisibles3185 = [];
+
+    for (const bloc of BLOCS_FIXES) {
+      const lignesBloc = data.filter((item) => normaliserBloc(item.bloc) === bloc);
+      lignesVisibles3185.push(...lignesBloc);
+    }
+
+    return lignesVisibles3185.map((item, index) => {
+      const id = item.id || `ligne-${index}`;
+
+      // Correction : le 3177 commence à 0.
+      // Avant, le gain reprenait automatiquement le montant du 3185,
+      // ce qui créait un total de gains élevé même quand tout était à 0.
+      const gainDefaut = 0;
+      const gains = round2(lireValeur3177(id, "gains", gainDefaut));
+
+      const depenses = Array.from({ length: 7 }, (_, i) =>
+        round2(lireValeur3177(id, `depense${i + 1}`, 0))
+      );
+
+      const totalDepenses = round2(depenses.reduce((acc, val) => acc + Number(val || 0), 0));
+      const solde = round2(gains - totalDepenses);
+
+      return {
+        id,
+        index,
+        bloc: item.bloc || "SANS BLOC",
+        description: item.description || "-",
+        gains,
+        depenses,
+        totalDepenses,
+        solde,
+        echeance: item.echeance || "",
+      };
+    });
+  }
+
+  function renduInput3177(ligne, champ, valeur, align = "right") {
+    const inputKey = `${ligne.id}-${champ}`;
+    const valeurSauvee = valeurs3177?.[ligne.id]?.[champ];
+    const valeurBrute =
+      valeurSauvee === undefined || valeurSauvee === null || valeurSauvee === ""
+        ? valeur
+        : valeurSauvee;
+
+    const valeurAffichee =
+      input3177Actif === inputKey
+        ? String(valeurBrute ?? "")
+        : Number(valeurBrute || 0).toFixed(2);
+
+    return (
+      <input
+        type="text"
+        inputMode="decimal"
+        value={valeurAffichee}
+        onFocus={(e) => {
+          setInput3177Actif(inputKey);
+          requestAnimationFrame(() => e.target.select());
+        }}
+        onChange={(e) => {
+          const texte = e.target.value.replace(",", ".");
+          if (/^-?\d*\.?\d*$/.test(texte)) {
+            const nextValues = {
+              ...valeurs3177,
+              [ligne.id]: {
+                ...(valeurs3177[ligne.id] || {}),
+                [champ]: texte,
+              },
+            };
+            sauvegarderValeurs3177(nextValues);
+          }
+        }}
+        onBlur={(e) => {
+          modifierValeur3177(ligne.id, champ, e.target.value);
+          setInput3177Actif(null);
+        }}
+        style={{
+          ...styles.bank3177Input,
+          textAlign: align,
+        }}
+      />
+    );
+  }
+
+  function renduTableau3177() {
+    const lignes3177 = construireTableau3177();
+    const totalGains = lignes3177.reduce((acc, item) => acc + Number(item.gains || 0), 0);
+    const totalSolde = lignes3177.reduce((acc, item) => acc + Number(item.solde || 0), 0);
+
+    return (
+      <div key={compteActif} style={styles.pageSwitchAnimation}>
+        <div style={styles.bank3177Shell}>
+          <div style={styles.bank3177Header}>
+            <div>
+              <div style={styles.bank3177Kicker}>Compte miroir automatique</div>
+              <div style={styles.bank3177Title}>{compteArgentAccumule || compteActif}</div>
+            </div>
+          </div>
+
+          <div style={styles.bank3177Note}>
+            Les descriptions sont synchronisées automatiquement avec le compte <strong>{comptePrincipalBudget}</strong>. Tu peux modifier les gains et entrer jusqu’à 7 dépenses par ligne.
+          </div>
+
+          <div style={styles.bank3177TableWrap}>
+            <table style={styles.bank3177Table}>
+              <thead>
+                <tr>
+                  <th style={{ ...styles.bank3177Th, width: "31%" }}>DESCRIPTION</th>
+                  <th style={{ ...styles.bank3177Th, width: "11%" }}>GAINS</th>
+                  <th style={styles.bank3177Th} colSpan={7}>DÉPENSES</th>
+                  <th style={{ ...styles.bank3177Th, width: "11%" }}>SOLDE</th>
+                </tr>
+                <tr>
+                  <th style={styles.bank3177SubTh}></th>
+                  <th style={styles.bank3177SubTh}></th>
+                  {Array.from({ length: 7 }, (_, i) => (
+                    <th key={`dep-head-${i}`} style={styles.bank3177SubTh}>Dép. {i + 1}</th>
+                  ))}
+                  <th style={styles.bank3177SubTh}></th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {lignes3177.length === 0 ? (
+                  <tr>
+                    <td colSpan={10} style={styles.bank3177Empty}>
+                      Aucune ligne dans le compte Enveloppes.
+                    </td>
+                  </tr>
+                ) : (
+                  lignes3177.map((ligne) => {
+                    const sectionColor =
+                      ligne.bloc.includes("ECOLE")
+                        ? "#fdf2f8"
+                        : ligne.bloc.includes("AUTOMOBILES")
+                        ? "#f8fafc"
+                        : ligne.bloc.includes("MAISON")
+                        ? "#f0fdf4"
+                        : "#ffffff";
+
+                    return (
+                      <tr key={ligne.id}>
+                        <td style={{ ...styles.bank3177TdDescription, background: sectionColor }}>
+                          <span style={styles.bank3177LineNumber}>{ligne.index + 1}</span>
+                          <span>{ligne.description}</span>
+                        </td>
+
+                        <td style={styles.bank3177TdInput}>
+                          {renduInput3177(ligne, "gains", ligne.gains)}
+                        </td>
+
+                        {ligne.depenses.map((valeur, depIndex) => (
+                          <td key={`${ligne.id}-dep-${depIndex}`} style={styles.bank3177TdInput}>
+                            {renduInput3177(ligne, `depense${depIndex + 1}`, valeur)}
+                          </td>
+                        ))}
+
+                        <td style={styles.bank3177TdSolde}>
+                          {formatArgent(ligne.solde)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+
+                <tr>
+                  <td colSpan={10} style={styles.bank3177BottomSpacer}></td>
+                </tr>
+              </tbody>
+            </table>
+            <div style={styles.bottomSafeSpacer} />
+          </div>
+
+          <div style={styles.bank3177Footer}>
+            <div style={styles.bank3177FooterSpacer}></div>
+
+            <div style={styles.bank3177FooterMetric}>
+              <span style={styles.bank3177FooterLabel}>Gains</span>
+              <strong style={styles.bank3177FooterValue}>{formatArgent(totalGains)}</strong>
+            </div>
+
+            <div style={styles.bank3177FooterSpacer}></div>
+
+            <div style={styles.bank3177FooterMetric}>
+              <span style={styles.bank3177FooterLabel}>Solde total</span>
+              <strong style={styles.bank3177FooterValue}>{formatArgent(totalSolde)}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   function headerFixe(content, index, extra = {}) {
     return (
       <th
@@ -1297,6 +1870,10 @@ export default function App() {
   }
 
   const categoriesTriees = trierCategories(STRUCTURE_BUDGET[blocActif] || ["Autre"]);
+  const comptePrincipalBudget = trouverCompteParIntitule("Enveloppes");
+  const compteArgentAccumule = trouverCompteParIntitule("Argent accumulé");
+  const afficherTableauDetaille = compteEstEnveloppes(compteActif);
+
 
   if (authLoading) {
     return (
@@ -1332,7 +1909,8 @@ export default function App() {
           }
 
           body {
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: hidden;
           }
 
           @keyframes teslaPulse {
@@ -1482,6 +2060,11 @@ export default function App() {
           pointer-events: none;
         }
 
+        @keyframes floatingHeaderPulse {
+          0%, 100% { transform: translateY(0); filter: brightness(1); }
+          50% { transform: translateY(-1px); filter: brightness(1.08); }
+        }
+
         @keyframes glassSweep {
           0% { transform: translateX(-120%); }
           48% { transform: translateX(-120%); }
@@ -1500,9 +2083,156 @@ export default function App() {
               <div style={styles.bankCardScan}></div>
             </div>
         <div>
-          <div style={styles.titleSmall}>Budget personnel</div>
+          <div style={styles.titleSmall}>Budget personnel · Interface PRO</div>
           <h1 style={styles.title}>DASHBOARD BUDGET MAISON</h1>
         </div>
+      </div>
+
+      <div
+        onMouseDown={(e) => demarrerDragDock(e, "account", { width: 700, height: 64 })}
+        style={{
+          ...styles.floatingMiniDock,
+          left: dockPositions.account.x,
+          top: dockPositions.account.y,
+          borderColor: weekGlowSoft,
+          boxShadow: `0 14px 42px rgba(0,0,0,0.34), 0 0 22px ${weekGlowSoft}, inset 0 1px 0 rgba(255,255,255,0.08)`,
+        }}
+        title="Glisse cette barre pour la déplacer"
+      >
+        <div style={styles.miniDockHandle}>☰ Compte</div>
+
+        <span style={styles.commandLabel}>Page / compte</span>
+
+        <select
+          value={compteActif}
+          onChange={(e) => changerCompteActif(e.target.value)}
+          style={styles.accountSelectClean}
+          title="Changer de page comme un onglet Excel"
+        >
+          {comptesBudget.map((compte) => (
+            <option key={compte} value={compte}>
+              {compte}
+            </option>
+          ))}
+        </select>
+
+        <button onClick={renommerCompteActif} style={styles.cleanButton} type="button">
+          Changer numéro
+        </button>
+
+        <input
+          value={nouveauCompte}
+          onChange={(e) => setNouveauCompte(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") ajouterCompteBudget();
+          }}
+          placeholder="Nouveau compte"
+          style={styles.accountInputClean}
+        />
+
+        <button onClick={ajouterCompteBudget} style={styles.cleanButton} type="button">
+          + Page
+        </button>
+
+        <button onClick={supprimerCompteActif} style={styles.cleanDangerIconButton} type="button">
+          🗑
+        </button>
+      </div>
+
+      <div
+        onMouseDown={(e) => demarrerDragDock(e, "calendar", { width: 180, height: 58 })}
+        style={{
+          ...styles.floatingMiniDock,
+          left: dockPositions.calendar.x,
+          top: dockPositions.calendar.y,
+          borderColor: weekGlowSoft,
+          boxShadow: `0 14px 32px rgba(0,0,0,0.30), 0 0 18px ${weekGlowSoft}`,
+        }}
+        title="Glisse cette barre pour la déplacer"
+      >
+        <div style={styles.miniDockHandle}>☰ Date</div>
+
+        <button
+          onClick={() => setShowCalendarPanel(true)}
+          style={{
+            ...styles.weekCalendarButtonClean,
+            borderColor: weekGlowColor,
+            boxShadow: `0 0 16px ${weekGlowSoft}, inset 0 1px 0 rgba(255,255,255,0.18)`,
+          }}
+          type="button"
+        >
+          S{semaineActuelle}
+        </button>
+
+        <div style={styles.dateMiniBoxClean}>
+          {nowLive.getDate()} {moisActuelTexte}
+        </div>
+      </div>
+
+      <div
+        onMouseDown={(e) => demarrerDragDock(e, "user", { width: 250, height: 58 })}
+        style={{
+          ...styles.floatingMiniDock,
+          left: dockPositions.user.x,
+          top: dockPositions.user.y,
+          borderColor: "rgba(34,197,94,0.28)",
+        }}
+        title="Glisse cette barre pour la déplacer"
+      >
+        <div style={styles.miniDockHandle}>☰ Utilisateur</div>
+        <div style={styles.userBadge}>🟢 {session?.user?.email}</div>
+      </div>
+
+      <div
+        onMouseDown={(e) => demarrerDragDock(e, "actions", { width: 280, height: 58 })}
+        style={{
+          ...styles.floatingMiniDock,
+          left: dockPositions.actions.x,
+          top: dockPositions.actions.y,
+          borderColor: "rgba(56,189,248,0.28)",
+        }}
+        title="Glisse cette barre pour la déplacer"
+      >
+        <div style={styles.miniDockHandle}>☰ Actions</div>
+
+        <button onClick={sauvegardeManuelle} style={styles.cleanButton} type="button">
+          Sauvegarder
+        </button>
+
+        <button onClick={ouvrirTimeMachine} style={styles.cleanButton} type="button">
+          Time Machine
+        </button>
+      </div>
+
+      <div
+        onMouseDown={(e) => demarrerDragDock(e, "security", { width: 220, height: 96 })}
+        style={{
+          ...styles.floatingMiniDock,
+          left: dockPositions.security.x,
+          top: dockPositions.security.y,
+          borderColor: "rgba(248,113,113,0.30)",
+        }}
+        title="Glisse cette barre pour la déplacer"
+      >
+        <div style={styles.miniDockHandle}>
+          ☰ Sécurité
+          <button
+            onClick={resetPositionsDock}
+            style={styles.dockResetButton}
+            type="button"
+            title="Replacer toutes les barres"
+          >
+            ↺
+          </button>
+        </div>
+
+        <button onClick={reinitialiserTout} style={styles.cleanWarningButton} type="button">
+          Réinitialiser
+        </button>
+
+        <button onClick={seDeconnecter} style={styles.cleanLogoutButton} type="button">
+          Déconnexion
+        </button>
       </div>
 
       {showGuide && (
@@ -1671,66 +2401,7 @@ export default function App() {
         </div>
       )}
 
-      <div style={styles.leftHeaderDock}>
-        <div style={styles.actionGroup}>
-          <button
-            onClick={sauvegardeManuelle}
-            style={styles.saveButtonManual}
-            title="Sauvegarder une version du tableau"
-          >
-            💾 Sauvegarder
-          </button>
-
-          <button
-            onClick={reinitialiserTout}
-            style={styles.resetButton}
-            title="Effacer toutes les lignes avec mot de passe"
-          >
-            🧨 Réinitialiser
-          </button>
-        </div>
-      </div>
-
       <div style={styles.rightHeaderDock}>
-        <div style={styles.topActionDock}>
-          <button
-            onClick={() => setShowCalendarPanel(true)}
-            style={styles.weekCalendarButton}
-            title="Ouvrir le calendrier interactif"
-            type="button"
-          >
-            <span style={styles.weekCalendarLabel}>Semaine</span>
-            <strong style={styles.weekCalendarNumber}>{semaineActuelle}</strong>
-          </button>
-
-          <div style={styles.dateMiniBox}>
-            <span>{jourActuelTexte}</span>
-            <strong>{nowLive.getDate()} {moisActuelTexte}</strong>
-          </div>
-
-          <div style={styles.userBadge}>
-            🟢 {session?.user?.email}
-          </div>
-
-          <div style={styles.actionGroup}>
-            <button
-              onClick={ouvrirTimeMachine}
-              style={styles.historyButton}
-              title="Ouvrir la Time Machine pour restaurer une version"
-            >
-              ↩️ Time Machine
-            </button>
-
-            <button
-              onClick={seDeconnecter}
-              style={styles.logoutButton}
-              title="Se déconnecter"
-            >
-              Déconnexion
-            </button>
-          </div>
-        </div>
-
         {showSnapshots && (
           <div style={styles.timeMachinePanel}>
             <div style={styles.tmHeader}>
@@ -1824,66 +2495,13 @@ export default function App() {
         )}
       </div>
 
-        <div className="glass-glow" style={styles.panel}>
-          <div style={styles.accountHeader}>
-            <div style={styles.panelTitle}>1. Choisir un bloc de dépenses</div>
+        {afficherTableauDetaille ? (
+          <>
+        <div style={styles.compactProToolbar}>
+          <div style={styles.compactGroup}>
+            <span style={styles.compactStep}>1</span>
+            <span style={styles.compactLabel}>Bloc</span>
 
-            <div style={styles.accountSwitcher}>
-              <span style={styles.accountLabel}>Page / compte</span>
-              <select
-                value={compteActif}
-                onChange={(e) => changerCompteActif(e.target.value)}
-                style={styles.accountSelect}
-                title="Changer de page comme un onglet Excel"
-              >
-                {comptesBudget.map((compte) => (
-                  <option key={compte} value={compte}>
-                    {compte}
-                  </option>
-                ))}
-              </select>
-
-              <button
-                onClick={renommerCompteActif}
-                style={styles.accountRenameButton}
-                title="Renommer le compte actif"
-                type="button"
-              >
-                ✎ Renommer
-              </button>
-
-              <input
-                value={nouveauCompte}
-                onChange={(e) => setNouveauCompte(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") ajouterCompteBudget();
-                }}
-                placeholder="Nouveau compte"
-                style={styles.accountInput}
-                title="Écris un nouveau numéro ou nom de compte"
-              />
-
-              <button
-                onClick={ajouterCompteBudget}
-                style={styles.accountAddButton}
-                title="Créer une nouvelle page / compte"
-                type="button"
-              >
-                + Page
-              </button>
-
-              <button
-                onClick={supprimerCompteActif}
-                style={styles.accountDeleteButton}
-                title="Supprimer le compte actif"
-                type="button"
-              >
-                🗑
-              </button>
-            </div>
-          </div>
-
-          <div style={styles.selectOnlyRow}>
             <select
               value={blocActif}
               onChange={(e) => {
@@ -1892,7 +2510,7 @@ export default function App() {
                 setDescriptionAutre("");
                 setNoteEnfant("");
               }}
-              style={styles.blocSelect}
+              style={styles.compactSelectBloc}
             >
               {BLOCS_FIXES.map((bloc) => (
                 <option key={bloc} value={bloc}>
@@ -1903,31 +2521,29 @@ export default function App() {
 
             <button
               onClick={() => setShowGuide(true)}
-              style={styles.assistantTeslaButton}
+              style={styles.compactAssistantButton}
               title="Ouvrir l’assistant intelligent"
               type="button"
             >
-              <span style={styles.assistantPulseDot}>✦</span>
-              Assistant
+              ✦ Assistant
             </button>
           </div>
-        </div>
 
-        <div className="glass-glow" style={styles.panel}>
-          <div style={styles.panelTitle}>
-            2. Choisir une catégorie dans le bloc : <span style={styles.activeBloc}>{blocActif || "AUCUN"}</span>
-          </div>
+          <div style={styles.compactDivider} />
 
-          <div style={styles.formPro}>
+          <div style={styles.compactGroupLarge}>
+            <span style={styles.compactStep}>2</span>
+            <span style={styles.compactLabel}>Dépense</span>
+
             <select
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              style={styles.selectDepense}
+              style={styles.compactSelectDepense}
             >
               <option value="">Choisir une dépense</option>
-              {categoriesTriees.map((nom) => (
-                <option key={nom} value={nom}>
-                  {nom}
+              {categoriesTriees.map((cat) => (
+                <option key={cat} value={cat}>
+                  {cat}
                 </option>
               ))}
             </select>
@@ -1937,47 +2553,56 @@ export default function App() {
                 placeholder="Nom de la dépense"
                 value={descriptionAutre}
                 onChange={(e) => setDescriptionAutre(e.target.value)}
-                style={styles.inputDescriptionAutre}
+                style={styles.compactInput}
               />
             )}
 
             <input
-              placeholder="Précision ex: nom, enfant, marque, véhicule"
+              placeholder="Précision ex: nom, enfant..."
               value={noteEnfant}
               onChange={(e) => setNoteEnfant(e.target.value)}
-              style={styles.inputNote} title="Optionnel : ajoute une précision comme un nom, enfant, marque ou véhicule."
+              style={styles.compactInput}
             />
 
             <input
               type="number"
-              placeholder="Montant (case jaune)"
+              placeholder="Montant"
               value={montant}
               onChange={(e) => setMontant(e.target.value)}
-              style={styles.inputMontant} title="Montant de base. Le calcul semaine / mois / année se fait automatiquement." title="Entre le montant de base. Le calcul semaine / mois / année se fera automatiquement."
+              style={styles.compactMoneyInput}
             />
 
-            <select value={mode} onChange={(e) => setMode(e.target.value)} style={styles.inputMode} title="Choisis comment interpréter le montant : semaine, mois ou année." title="Choisis comment le montant doit être interprété : semaine, mois ou année.">
-                            <option value="semaine">Semaine</option>
+            <select value={mode} onChange={(e) => setMode(e.target.value)} style={styles.compactModeSelect}>
+              <option value="semaine">Semaine</option>
               <option value="mois">Mois</option>
               <option value="annee">Année</option>
             </select>
 
             <input
               type="number"
-              placeholder="Échéance 1-52"
+              placeholder="Éch. 1-52"
               value={echeance}
               onChange={(e) => setEcheance(e.target.value)}
-              style={styles.inputEcheance} title="Semaine d’échéance entre 1 et 52."
+              style={styles.compactEcheanceInput}
             />
 
-            <button onClick={ajouterLigne} style={styles.button} disabled={loading}>
-              {loading ? "Ajout..." : "Ajouter ligne"}
+            <button onClick={ajouterLigne} style={styles.compactAddButton} disabled={loading}>
+              {loading ? "..." : "+ Ajouter"}
             </button>
           </div>
         </div>
+
         {erreur && <div style={styles.error}>Erreur : {erreur}</div>}
 <div key={compteActif} style={styles.pageSwitchAnimation}>
-          <div ref={tableScrollRef} className="glass-glow" style={styles.tableWrapper}>
+          {afficherTableauDetaille ? (
+          <div
+            ref={tableScrollRef}
+            className="glass-glow"
+            style={styles.tableWrapper}
+            onScroll={(e) => {
+              lastScrollRef.current = e.currentTarget.scrollLeft;
+            }}
+          >
             <table style={styles.table}>
             <thead>
               <tr>
@@ -1993,6 +2618,9 @@ export default function App() {
                 <th style={styles.calendarTitle} colSpan={52}>
                   CALENDRIER POUR LES SEMAINES
                 </th>
+                <th style={styles.transferHeader}>
+                  TRANSFERT
+                </th>
               </tr>
 
             </thead>
@@ -2000,7 +2628,7 @@ export default function App() {
             <tbody>
               {Object.keys(groupesFiltres).length === 0 ? (
                 <tr>
-                  <td colSpan={61} style={styles.empty}>
+                  <td colSpan={62} style={styles.empty}>
                     Sélectionne une dépense et ajoute une ligne.
                   </td>
                 </tr>
@@ -2022,7 +2650,7 @@ export default function App() {
                   return (
                     <Fragment key={nomBloc}>
                       <tr>
-                        <td colSpan={61} style={styles.blocRow}>
+                        <td colSpan={62} style={styles.blocRow}>
                           DÉPENSES : {nomBloc}
                         </td>
                       </tr>
@@ -2037,7 +2665,7 @@ export default function App() {
                           {celluleFixe("", 6)}
                           {celluleFixe("", 7)}
                           {celluleFixe("", 8)}
-                          <td colSpan={52} style={styles.emptyLine}></td>
+                          <td colSpan={53} style={styles.emptyLine}></td>
                         </tr>
                       ) : (
                         lignes.map((item) => {
@@ -2079,13 +2707,27 @@ export default function App() {
                                       <button onClick={annulerEditionInfo} style={styles.cancelButton}>×</button>
                                     </div>
                                   ) : (
-                                    <button
-                                      onClick={() => commencerEditionInfo(item)}
-                                      style={styles.descriptionEditButton}
-                                      title="Cliquer pour modifier la catégorie / note"
-                                    >
-                                      {item.description || "-"}
-                                    </button>
+                                    <div style={styles.descriptionRowTools}>
+                                      <button
+                                        onClick={() => commencerEditionInfo(item)}
+                                        style={styles.descriptionEditButton}
+                                        title="Cliquer pour modifier la catégorie / note"
+                                      >
+                                        {item.description || "-"}
+                                      </button>
+
+                                      <button
+                                        onClick={() => viderXLigne(item)}
+                                        style={{
+                                          ...styles.clearXRowButton,
+                                          opacity: nbX > 0 ? 1 : 0.45,
+                                        }}
+                                        title={nbX > 0 ? `Supprimer les ${nbX} X de cette ligne` : "Aucun X sur cette ligne"}
+                                        type="button"
+                                      >
+                                        🧹 X
+                                      </button>
+                                    </div>
                                   ),
                                   0,
                                   { ...styles.tdLeft, verticalAlign: "middle" },
@@ -2123,18 +2765,18 @@ export default function App() {
                                     ) : (
                                       <button
                                         onClick={() => commencerEditionMontant(item)}
-                                        style={styles.yellowEditButton}
+                                        style={styles.blueEditButton}
                                         title="Cliquer pour modifier le montant"
                                       >
                                         {formatArgent(calcul.semaine)}
                                       </button>
                                     )
                                   ) : (
-                                    formatArgent(calcul.semaine)
+                                    <span style={styles.amountPaleBadge}>{formatArgent(calcul.semaine)}</span>
                                   ),
                                   2,
                                   {
-                                    ...(item.mode === "semaine" ? styles.yellowInputCell : styles.redText),
+                                    ...(item.mode === "semaine" ? styles.blueInputCell : {}),
                                     verticalAlign: "middle",
                                   },
                                   { rowSpan: 2 }
@@ -2156,18 +2798,18 @@ export default function App() {
                                     ) : (
                                       <button
                                         onClick={() => commencerEditionMontant(item)}
-                                        style={styles.yellowEditButton}
+                                        style={styles.blueEditButton}
                                         title="Cliquer pour modifier le montant"
                                       >
                                         {formatArgent(calcul.mois)}
                                       </button>
                                     )
                                   ) : (
-                                    formatArgent(calcul.mois)
+                                    <span style={styles.amountPaleBadge}>{formatArgent(calcul.mois)}</span>
                                   ),
                                   3,
                                   {
-                                    ...(item.mode === "mois" ? styles.yellowInputCell : {}),
+                                    ...(item.mode === "mois" ? styles.blueInputCell : {}),
                                     verticalAlign: "middle",
                                   },
                                   { rowSpan: 2 }
@@ -2189,23 +2831,54 @@ export default function App() {
                                     ) : (
                                       <button
                                         onClick={() => commencerEditionMontant(item)}
-                                        style={styles.yellowEditButton}
+                                        style={styles.blueEditButton}
                                         title="Cliquer pour modifier le montant"
                                       >
                                         {formatArgent(calcul.annee)}
                                       </button>
                                     )
                                   ) : (
-                                    formatArgent(calcul.annee)
+                                    <span style={styles.amountPaleBadge}>{formatArgent(calcul.annee)}</span>
                                   ),
                                   4,
                                   {
-                                    ...(item.mode === "annee" ? styles.yellowInputCell : styles.redText),
+                                    ...(item.mode === "annee" ? styles.blueInputCell : {}),
                                     verticalAlign: "middle",
                                   },
                                   { rowSpan: 2 }
                                 )}
-                                {celluleFixe(item.echeance || "-", 5, { ...styles.blueText, verticalAlign: "middle" }, { rowSpan: 2 })}
+                                {celluleFixe(
+                                  echeanceEdition === item.id ? (
+                                    <div style={styles.editWrap}>
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        max="52"
+                                        value={echeanceEditionValue}
+                                        onChange={(e) => setEcheanceEditionValue(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") sauvegarderEcheance(item);
+                                          if (e.key === "Escape") annulerEditionEcheance();
+                                        }}
+                                        style={styles.echeanceEditInput}
+                                        autoFocus
+                                      />
+                                      <button onClick={() => sauvegarderEcheance(item)} style={styles.saveButton}>✓</button>
+                                      <button onClick={annulerEditionEcheance} style={styles.cancelButton}>×</button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      onClick={() => commencerEditionEcheance(item)}
+                                      style={styles.echeanceEditButton}
+                                      title="Cliquer pour modifier l’échéance"
+                                    >
+                                      {item.echeance || "-"}
+                                    </button>
+                                  ),
+                                  5,
+                                  { ...styles.blueText, verticalAlign: "middle" },
+                                  { rowSpan: 2 }
+                                )}
                                 {celluleFixe(nbX, 6, { verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(formatArgent(acc), 7, { ...styles.accumuleCell, verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(
@@ -2246,6 +2919,17 @@ export default function App() {
                                     </td>
                                   );
                                 })}
+
+                                <td style={styles.transferColumnCell} rowSpan={2}>
+                                  <button
+                                    type="button"
+                                    onClick={() => transfererChiffre(item)}
+                                    style={styles.transferButton}
+                                    title="Transfert permis seulement avec 52 X. Pour retransférer : effacer tous les X puis remettre les 52 X."
+                                  >
+                                    ⇄
+                                  </button>
+                                </td>
                               </tr>
 
                               {/* Ligne du bas : cases X cliquables */}
@@ -2291,7 +2975,7 @@ export default function App() {
                         {celluleFixe("", 6, styles.totalCell)}
                         {celluleFixe("", 7, styles.totalCell)}
                         {celluleFixe("", 8, styles.totalCell)}
-                        <td colSpan={52} style={styles.totalCalendar}></td>
+                        <td colSpan={53} style={styles.totalCalendar}></td>
                       </tr>
                     </Fragment>
                   );
@@ -2299,8 +2983,36 @@ export default function App() {
               )}
             </tbody>
             </table>
+            <div style={styles.bottomSafeSpacer} />
           </div>
+          ) : (
+            <div style={styles.blankAccountPage}>
+              <div style={styles.blankAccountCard}>
+                <div style={styles.blankAccountKicker}>Page secondaire</div>
+                <div style={styles.blankAccountTitle}>{compteActif}</div>
+                <div style={styles.blankAccountText}>
+                  Cette page est volontairement vide. Le tableau détaillé avec les semaines est affiché seulement dans le compte principal : <strong>{comptePrincipalBudget}</strong>.
+                </div>
+              </div>
+            </div>
+          )}
         </div>
+          </>
+        ) : compteEstArgentAccumule(compteActif) ? (
+          renduTableau3177()
+        ) : (
+          <div key={compteActif} style={styles.pageSwitchAnimation}>
+            <div style={styles.blankAccountPage}>
+              <div style={styles.blankAccountCard}>
+                <div style={styles.blankAccountKicker}>Compte sans tableau détaillé</div>
+                <div style={styles.blankAccountTitle}>{compteActif}</div>
+                <div style={styles.blankAccountText}>
+                  Cette page est volontairement blanche. Les lignes avec montants et semaines sont conservées uniquement dans <strong>{comptePrincipalBudget}</strong>.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div style={styles.excelTabsBar}>
           {comptesBudget.map((compte) => {
@@ -2322,13 +3034,13 @@ export default function App() {
                   ...(actif ? styles.excelTabActive : {}),
                   ...(actif ? { color: couleur } : {}),
                 }}
-                title="Clique pour ouvrir. Double-clic pour renommer. Glisse pour déplacer."
+                title="Clique pour ouvrir. Double-clic pour changer le numéro. Glisse pour déplacer."
               >
                 {compteEdition === compte ? (
                   <input
                     value={compteEditionValeur}
                     onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => setCompteEditionValeur(e.target.value)}
+                    onChange={(e) => setCompteEditionValeur(e.target.value.replace(/[^0-9]/g, ""))}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") validerRenameCompte();
                       if (e.key === "Escape") setCompteEdition(null);
@@ -2345,39 +3057,894 @@ export default function App() {
           })}
         </div>
 
-        <div style={styles.ultraNav}>
-          <button onClick={() => scrollTableTo("start")} style={styles.navButton}>
-            ⏮ Début
-          </button>
+        {afficherTableauDetaille && (
+          <div style={styles.financeNavBar}>
+            <div style={styles.financeNavShell}>
+              <button onClick={() => scrollTableTo("start")} style={styles.financeNavButton}>
+                ⏮ Début
+              </button>
 
-          <button onClick={() => scrollTableBy(-700)} style={styles.navButton}>
-            ◀ Gauche
-          </button>
+              <button onClick={() => scrollTableBy(-700)} style={styles.financeNavButton}>
+                ◀ Gauche
+              </button>
 
-          <div style={styles.navCenter}>
-            <div style={styles.navInfo}>
-              Navigation calendrier · {Math.round((scrollInfo.left / scrollInfo.max) * 100)}%
-            </div>
+              <div style={styles.financeNavCenter}>
+                <div style={styles.financeNavTopLine}>
+                  <span>Navigation calendrier</span>
+                  <strong>{Math.round((scrollInfo.left / Math.max(scrollInfo.max, 1)) * 100)}%</strong>
+                </div>
 
-            <div ref={bottomScrollRef} style={styles.bottomScroll}>
-              <div style={{ width: "3200px", height: "1px" }} />
+                <div style={styles.financeTrackOuter}>
+                  <div
+                    style={{
+                      ...styles.financeTrackFill,
+                      width: `${Math.round((scrollInfo.left / Math.max(scrollInfo.max, 1)) * 100)}%`,
+                    }}
+                  />
+                </div>
+
+                <div ref={bottomScrollRef} style={styles.financeBottomScroll}>
+                  <div style={{ width: "4000px", height: "1px" }} />
+                </div>
+              </div>
+
+              <button onClick={() => scrollTableBy(700)} style={styles.financeNavButton}>
+                Droite ▶
+              </button>
+
+              <button onClick={() => scrollTableTo("end")} style={styles.financeNavButton}>
+                Fin ⏭
+              </button>
             </div>
           </div>
-
-          <button onClick={() => scrollTableBy(700)} style={styles.navButton}>
-            Droite ▶
-          </button>
-
-          <button onClick={() => scrollTableTo("end")} style={styles.navButton}>
-            Fin ⏭
-          </button>
-        </div>
+        )}
       </div>
     </>
   );
 }
 
 const styles = {
+  bank3177FooterMetric: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: "10px",
+    minWidth: 0,
+  },
+
+  bank3177FooterSpacer: {
+    minWidth: 0,
+  },
+
+  bank3177FooterValue: {
+    minWidth: "128px",
+    height: "38px",
+    padding: "0 10px",
+    borderRadius: "12px",
+    border: "1px solid #93c5fd",
+    background: "#ffffff",
+    color: "#0f172a",
+    fontSize: "18px",
+    fontWeight: "900",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 14px rgba(15,23,42,0.10)",
+  },
+
+  bank3177FooterLabel: {
+    color: "#334155",
+    fontSize: "12px",
+    fontWeight: "750",
+    textTransform: "uppercase",
+    letterSpacing: "0.6px",
+    whiteSpace: "nowrap",
+  },
+
+  bank3177Footer: {
+    height: "64px",
+    minHeight: "64px",
+    padding: "10px 14px",
+    display: "grid",
+    gridTemplateColumns: "31% 16% 29% 24%",
+    alignItems: "center",
+    gap: "0",
+    background: "linear-gradient(180deg, #f8fafc 0%, #eaf3ff 100%)",
+    borderTop: "1px solid #bfdbfe",
+    boxShadow: "0 -8px 18px rgba(15,23,42,0.08)",
+  },
+
+  bank3177BottomSpacer: {
+    height: "18px",
+    background: "#ffffff",
+    border: "none",
+  },
+
+  bottomSafeSpacer: {
+    height: "150px",
+    minHeight: "150px",
+    width: "100%",
+    pointerEvents: "none",
+  },
+
+  financeNavigationDock: {
+    position: "fixed",
+    left: "50%",
+    bottom: "78px",
+    transform: "translateX(-50%)",
+    width: "min(1180px, calc(100vw - 32px))",
+    zIndex: 990,
+    borderRadius: "18px",
+    padding: "10px",
+    background: "linear-gradient(180deg, rgba(2,8,23,0.95), rgba(3,15,35,0.98))",
+    border: "1px solid rgba(56,189,248,0.35)",
+    boxShadow: "0 -10px 28px rgba(0,0,0,0.42), 0 0 24px rgba(14,165,233,0.18)",
+  },
+
+  bank3177Input: {
+    width: "100%",
+    height: "24px",
+    borderRadius: "7px",
+    border: "1px solid #bfdbfe",
+    background: "#f8fbff",
+    color: "#0f172a",
+    fontWeight: "550",
+    fontSize: "12px",
+    padding: "0 6px",
+    outline: "none",
+  },
+
+  bank3177TdInput: {
+    border: "1px solid rgba(15,23,42,0.24)",
+    padding: "3px 5px",
+    background: "#ffffff",
+    textAlign: "right",
+  },
+
+  bank3177SubTh: {
+    position: "sticky",
+    top: "29px",
+    zIndex: 3,
+    background: "#eaf3ff",
+    color: "#0f172a",
+    border: "1px solid rgba(148,163,184,0.45)",
+    padding: "4px",
+    fontSize: "11px",
+    fontWeight: "650",
+    textAlign: "center",
+  },
+
+  bank3177Empty: {
+    padding: "36px",
+    textAlign: "center",
+    color: "#475569",
+    fontWeight: "700",
+    background: "#ffffff",
+  },
+
+  bank3177TotalSolde: {
+    background: "#ffffff",
+    color: "#0f172a",
+    border: "1px solid rgba(148,163,184,0.35)",
+    padding: "7px 8px",
+    fontWeight: "750",
+    textAlign: "right",
+  },
+
+  bank3177TotalCell: {
+    background: "#ffffff",
+    color: "#0f172a",
+    border: "1px solid rgba(148,163,184,0.35)",
+    padding: "7px 8px",
+    fontWeight: "650",
+    textAlign: "right",
+  },
+
+  bank3177TotalLabel: {
+    background: "#ffffff",
+    color: "#0f172a",
+    border: "1px solid rgba(148,163,184,0.35)",
+    padding: "7px 8px",
+    fontWeight: "650",
+    textAlign: "right",
+  },
+
+  bank3177TdSolde: {
+    border: "1px solid rgba(15,23,42,0.24)",
+    padding: "5px 8px",
+    color: "#0f172a",
+    background: "#fdf4ff",
+    fontWeight: "700",
+    textAlign: "right",
+  },
+
+  bank3177TdMoney: {
+    border: "1px solid rgba(15,23,42,0.24)",
+    padding: "5px 8px",
+    color: "#0f172a",
+    background: "#f8fafc",
+    fontWeight: "600",
+    textAlign: "right",
+  },
+
+  bank3177LineNumber: {
+    minWidth: "24px",
+    height: "20px",
+    borderRadius: "6px",
+    background: "#eaf3ff",
+    border: "1px solid #93c5fd",
+    color: "#0f172a",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "11px",
+    fontWeight: "650",
+  },
+
+  bank3177TdDescription: {
+    border: "1px solid rgba(15,23,42,0.35)",
+    padding: "4px 8px",
+    color: "#0f172a",
+    fontWeight: "600",
+    textAlign: "left",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    minHeight: "28px",
+  },
+
+  bank3177Th: {
+    position: "sticky",
+    top: 0,
+    zIndex: 3,
+    background: "#020617",
+    color: "#ffffff",
+    border: "1px solid rgba(15,23,42,0.55)",
+    padding: "6px",
+    fontSize: "12px",
+    fontWeight: "750",
+    textAlign: "center",
+    letterSpacing: "0.4px",
+  },
+
+  bank3177Table: {
+    width: "100%",
+    borderCollapse: "collapse",
+    tableLayout: "fixed",
+    color: "#0f172a",
+    fontSize: "12px",
+  },
+
+  bank3177TableWrap: {
+    flex: 1,
+    minHeight: 0,
+    overflow: "auto",
+    background: "#ffffff",
+    paddingBottom: "20px",
+    scrollPaddingBottom: "90px",
+  },
+
+  bank3177Note: {
+    padding: "8px 18px",
+    background: "#eaf3ff",
+    color: "#0f172a",
+    borderBottom: "1px solid #bfdbfe",
+    fontSize: "12px",
+    fontWeight: "650",
+  },
+
+  bank3177SummaryCard: {
+    minWidth: "135px",
+    padding: "8px 10px",
+    borderRadius: "12px",
+    background: "rgba(15,23,42,0.78)",
+    border: "1px solid rgba(147,197,253,0.24)",
+    color: "#e5e7eb",
+    display: "grid",
+    gap: "2px",
+    textAlign: "right",
+  },
+
+  bank3177Summary: {
+    display: "none",
+  },
+
+  bank3177Title: {
+    color: "#ffffff",
+    fontSize: "24px",
+    fontWeight: "950",
+    letterSpacing: "1px",
+    textShadow: "0 2px 0 rgba(0,0,0,0.40)",
+  },
+
+  bank3177Kicker: {
+    color: "#67e8f9",
+    fontSize: "11px",
+    fontWeight: "900",
+    letterSpacing: "1.4px",
+    textTransform: "uppercase",
+  },
+
+  bank3177Header: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: "16px",
+    padding: "14px 18px",
+    background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
+    borderBottom: "1px solid rgba(147,197,253,0.30)",
+  },
+
+  bank3177Shell: {
+    width: "min(1560px, calc(100vw - 32px))",
+    height: "calc(100vh - 345px)",
+    minHeight: "340px",
+    margin: "0 auto",
+    borderRadius: "18px",
+    border: "1px solid rgba(147,197,253,0.28)",
+    background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)",
+    overflow: "hidden",
+    boxShadow: "0 18px 46px rgba(0,0,0,0.30)",
+    display: "flex",
+    flexDirection: "column",
+  },
+
+  transferButton: {
+    minWidth: "58px",
+    height: "28px",
+    borderRadius: "9px",
+    border: "1px solid #93c5fd",
+    background: "#eaf3ff",
+    color: "#0f172a",
+    fontWeight: "850",
+    fontSize: "16px",
+    cursor: "pointer",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+  },
+
+  transferColumnCell: {
+    width: "82px",
+    minWidth: "82px",
+    textAlign: "center",
+    verticalAlign: "middle",
+    background: "#f8fafc",
+    borderRight: "1px solid rgba(15,23,42,0.16)",
+    borderBottom: "1px solid rgba(15,23,42,0.16)",
+  },
+
+  transferHeader: {
+    position: "sticky",
+    top: 0,
+    zIndex: 50,
+    background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
+    color: "#ffffff",
+    fontWeight: "800",
+    fontSize: "12px",
+    padding: "6px",
+    borderRight: "1px solid rgba(15,23,42,0.22)",
+    textAlign: "center",
+    whiteSpace: "nowrap",
+    minWidth: "82px",
+  },
+
+  amountPaleBadge: {
+    minWidth: "72px",
+    height: "26px",
+    padding: "0 9px",
+    borderRadius: "8px",
+    border: "1px solid #93c5fd",
+    background: "#eaf3ff",
+    color: "#0f172a",
+    fontWeight: "650",
+    fontSize: "12px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+    whiteSpace: "nowrap",
+  },
+
+  yellowEditButton: {
+    minWidth: "72px",
+    height: "26px",
+    padding: "0 9px",
+    borderRadius: "8px",
+    border: "1px solid #93c5fd",
+    background: "#eaf3ff",
+    color: "#0f172a",
+    fontWeight: "650",
+    fontSize: "12px",
+    cursor: "pointer",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+    transition: "background 0.15s ease, border-color 0.15s ease",
+    whiteSpace: "nowrap",
+  },
+
+  blueEditButton: {
+    minWidth: "72px",
+    height: "26px",
+    padding: "0 9px",
+    borderRadius: "8px",
+    border: "1px solid #93c5fd",
+    background: "#eaf3ff",
+    color: "#0f172a",
+    fontWeight: "650",
+    fontSize: "12px",
+    cursor: "pointer",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+    transition: "background 0.15s ease, border-color 0.15s ease",
+    whiteSpace: "nowrap",
+  },
+
+  blueInputCell: {
+    background: "#ffffff",
+    border: "1px solid rgba(147,197,253,0.80)",
+    color: "#0f172a",
+    fontWeight: "650",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+  },
+
+  descriptionEditButton: {
+    minHeight: "24px",
+    maxWidth: "calc(100% - 70px)",
+    padding: "2px 6px",
+    border: "1px solid rgba(15,23,42,0.18)",
+    background: "#ffffff",
+    color: "#0f172a",
+    borderRadius: "4px",
+    fontSize: "12px",
+    fontWeight: "650",
+    cursor: "pointer",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+    textAlign: "left",
+  },
+
+  clearXRowButton: {
+    minWidth: "58px",
+    height: "26px",
+    padding: "0 8px",
+    borderRadius: "9px",
+    border: "1px solid #bfdbfe",
+    background: "#eff6ff",
+    color: "#334155",
+    fontWeight: "650",
+    fontSize: "11px",
+    cursor: "pointer",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+    whiteSpace: "nowrap",
+  },
+
+  descriptionRowTools: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
+    width: "100%",
+  },
+
+  compactAddButton: {
+    height: "36px",
+    padding: "0 16px",
+    borderRadius: "12px",
+    border: "1px solid rgba(250,204,21,0.52)",
+    background: "linear-gradient(180deg, #facc15 0%, #ca8a04 100%)",
+    color: "#111827",
+    fontWeight: "950",
+    fontSize: "13px",
+    cursor: "pointer",
+    boxShadow: "0 0 16px rgba(250,204,21,0.20), inset 0 1px 0 rgba(255,255,255,0.20)",
+    whiteSpace: "nowrap",
+    flexShrink: 0,
+  },
+
+  compactAssistantButton: {
+    height: "34px",
+    padding: "0 13px",
+    borderRadius: "11px",
+    border: "1px solid rgba(56,189,248,0.36)",
+    background: "linear-gradient(180deg, #0ea5e9 0%, #075985 100%)",
+    color: "#f0f9ff",
+    fontWeight: "950",
+    fontSize: "12px",
+    cursor: "pointer",
+    boxShadow: "0 0 12px rgba(56,189,248,0.18), inset 0 1px 0 rgba(255,255,255,0.15)",
+    whiteSpace: "nowrap",
+    flexShrink: 0,
+  },
+
+  compactEcheanceInput: {
+    height: "34px",
+    width: "105px",
+    borderRadius: "10px",
+    border: "1px solid rgba(148,163,184,0.28)",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "0 10px",
+    fontSize: "12px",
+    fontWeight: "900",
+    textAlign: "center",
+    outline: "none",
+    flexShrink: 0,
+  },
+
+  compactModeSelect: {
+    height: "34px",
+    width: "120px",
+    borderRadius: "10px",
+    border: "1px solid rgba(148,163,184,0.28)",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "0 10px",
+    fontSize: "12px",
+    fontWeight: "850",
+    outline: "none",
+    flexShrink: 0,
+  },
+
+  compactMoneyInput: {
+    height: "34px",
+    width: "120px",
+    borderRadius: "10px",
+    border: "1px solid rgba(148,163,184,0.28)",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "0 10px",
+    fontSize: "12px",
+    fontWeight: "900",
+    textAlign: "center",
+    outline: "none",
+    flexShrink: 0,
+  },
+
+  compactInput: {
+    height: "34px",
+    minWidth: "180px",
+    flex: "0 1 210px",
+    borderRadius: "10px",
+    border: "1px solid rgba(148,163,184,0.28)",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "0 10px",
+    fontSize: "12px",
+    fontWeight: "800",
+    outline: "none",
+  },
+
+  compactSelectDepense: {
+    height: "34px",
+    minWidth: "240px",
+    flex: "1 1 260px",
+    borderRadius: "10px",
+    border: "1px solid rgba(148,163,184,0.28)",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "0 10px",
+    fontSize: "12px",
+    fontWeight: "850",
+    outline: "none",
+  },
+
+  compactSelectBloc: {
+    height: "34px",
+    width: "420px",
+    minWidth: "420px",
+    borderRadius: "10px",
+    border: "1px solid rgba(148,163,184,0.28)",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "0 10px",
+    fontSize: "12px",
+    fontWeight: "850",
+    outline: "none",
+  },
+
+  compactDivider: {
+    width: "1px",
+    height: "34px",
+    background: "linear-gradient(180deg, transparent, rgba(125,211,252,0.45), transparent)",
+    flexShrink: 0,
+  },
+
+  compactLabel: {
+    color: "#67e8f9",
+    fontSize: "11px",
+    fontWeight: "950",
+    letterSpacing: "1px",
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
+  },
+
+  compactStep: {
+    width: "24px",
+    height: "24px",
+    borderRadius: "999px",
+    background: "linear-gradient(180deg, #0ea5e9, #075985)",
+    color: "#ffffff",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: "12px",
+    fontWeight: "950",
+    boxShadow: "0 0 12px rgba(56,189,248,0.20)",
+    flexShrink: 0,
+  },
+
+  compactGroupLarge: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    flex: 1,
+    minWidth: 0,
+    flexWrap: "nowrap",
+  },
+
+  compactGroup: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    flexShrink: 0,
+    minWidth: "620px",
+  },
+
+  compactProToolbar: {
+    width: "min(1840px, calc(100vw - 20px))",
+    margin: "0 auto 6px",
+    padding: "8px",
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    borderRadius: "18px",
+    background: "linear-gradient(135deg, rgba(8,22,40,0.90), rgba(15,23,42,0.68))",
+    border: "1px solid rgba(56,189,248,0.22)",
+    boxShadow: "0 14px 38px rgba(0,0,0,0.28), 0 0 22px rgba(34,211,238,0.08), inset 0 1px 0 rgba(255,255,255,0.07)",
+    overflow: "visible",
+  },
+
+  dualPanelsWrapper: {
+    width: "100%",
+    display: "flex",
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: "10px",
+  },
+
+  dualPanelRight: {
+    minWidth: 0,
+  },
+
+  dualPanelLeft: {
+    minWidth: 0,
+  },
+
+  dualPanelsRow: {
+    width: "min(1550px, calc(100vw - 28px))",
+    display: "grid",
+    gridTemplateColumns: "minmax(430px, 0.78fr) minmax(760px, 1.35fr)",
+    gap: "14px",
+    alignItems: "stretch",
+  },
+
+  financeBottomScroll: {
+    width: "100%",
+    height: "8px",
+    overflow: "hidden",
+    pointerEvents: "none",
+  },
+
+  financeTrackFill: {
+    height: "100%",
+    borderRadius: "999px",
+    background: "linear-gradient(90deg, #22c55e, #06b6d4, #3b82f6)",
+    boxShadow: "0 0 16px rgba(34,211,238,0.45)",
+    transition: "width 0.18s ease",
+  },
+
+  financeTrackOuter: {
+    height: "9px",
+    borderRadius: "999px",
+    background: "rgba(15,23,42,0.96)",
+    border: "1px solid rgba(148,163,184,0.16)",
+    overflow: "hidden",
+    boxShadow: "inset 0 1px 6px rgba(0,0,0,0.55)",
+  },
+
+  financeNavTopLine: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "12px",
+    color: "#67e8f9",
+    fontSize: "11px",
+    fontWeight: "950",
+    letterSpacing: "1.1px",
+    textTransform: "uppercase",
+    textShadow: "0 0 10px rgba(34,211,238,0.34)",
+  },
+
+  financeNavCenter: {
+    minWidth: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: "5px",
+  },
+
+  financeNavButton: {
+    height: "38px",
+    borderRadius: "13px",
+    border: "1px solid rgba(56,189,248,0.38)",
+    background: "linear-gradient(180deg, #0ea5e9 0%, #075985 100%)",
+    color: "#ecfeff",
+    fontWeight: "950",
+    fontSize: "12px",
+    cursor: "pointer",
+    boxShadow: "0 0 14px rgba(56,189,248,0.22), inset 0 1px 0 rgba(255,255,255,0.16)",
+    whiteSpace: "nowrap",
+  },
+
+  financeNavShell: {
+    minHeight: "54px",
+    display: "grid",
+    gridTemplateColumns: "116px 116px minmax(280px, 1fr) 116px 116px",
+    alignItems: "center",
+    gap: "10px",
+    maxWidth: "1520px",
+    margin: "0 auto",
+    padding: "9px",
+    borderRadius: "20px",
+    background: "linear-gradient(135deg, rgba(8,22,40,0.98), rgba(15,23,42,0.88))",
+    border: "1px solid rgba(56,189,248,0.34)",
+    boxShadow: "0 -8px 34px rgba(0,0,0,0.45), 0 0 28px rgba(34,211,238,0.16), inset 0 1px 0 rgba(255,255,255,0.10)",
+  },
+
+  financeNavBar: {
+    position: "fixed",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 980,
+    padding: "8px 14px",
+    background: "linear-gradient(180deg, rgba(2,6,23,0.22), rgba(2,6,23,0.98))",
+    backdropFilter: "blur(14px)",
+    borderTop: "1px solid rgba(34,211,238,0.22)",
+    boxShadow: "0 -14px 38px rgba(0,0,0,0.50), 0 -2px 24px rgba(34,211,238,0.10)",
+  },
+
+  blankAccountText: {
+    color: "#475569",
+    fontSize: "14px",
+    fontWeight: "750",
+    lineHeight: 1.55,
+  },
+
+  blankAccountTitle: {
+    color: "#0f172a",
+    fontSize: "28px",
+    fontWeight: "950",
+    marginBottom: "10px",
+  },
+
+  blankAccountKicker: {
+    color: "#0284c7",
+    fontSize: "12px",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    letterSpacing: "1.3px",
+    marginBottom: "8px",
+  },
+
+  blankAccountCard: {
+    width: "min(760px, 92vw)",
+    padding: "30px",
+    borderRadius: "24px",
+    background: "linear-gradient(180deg, #ffffff, #f1f5f9)",
+    border: "1px solid rgba(15,23,42,0.10)",
+    boxShadow: "0 22px 60px rgba(15,23,42,0.12)",
+    color: "#0f172a",
+    textAlign: "center",
+  },
+
+  blankAccountPage: {
+    minHeight: "calc(100vh - 330px)",
+    background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+    borderTop: "1px solid rgba(15,23,42,0.08)",
+    display: "flex",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    padding: "90px 20px 120px",
+  },
+
+  echeanceEditInput: {
+    width: "54px",
+    height: "26px",
+    borderRadius: "7px",
+    border: "1px solid rgba(14,165,233,0.45)",
+    background: "#ffffff",
+    color: "#0f172a",
+    fontWeight: "900",
+    textAlign: "center",
+    outline: "none",
+  },
+
+  echeanceEditButton: {
+    minWidth: "42px",
+    height: "28px",
+    padding: "0 10px",
+    borderRadius: "8px",
+    border: "1px solid #93c5fd",
+    background: "#eaf3ff",
+    color: "#0f172a",
+    fontWeight: "650",
+    cursor: "pointer",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+  },
+
+  miniDockHandle: {
+    height: "26px",
+    padding: "0 8px",
+    borderRadius: "10px",
+    background: "rgba(2,6,23,0.48)",
+    border: "1px solid rgba(148,163,184,0.12)",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    color: "#67e8f9",
+    fontSize: "11px",
+    fontWeight: "950",
+    letterSpacing: "0.8px",
+    textTransform: "uppercase",
+    cursor: "grab",
+    whiteSpace: "nowrap",
+  },
+
+  floatingMiniDock: {
+    position: "fixed",
+    zIndex: 850,
+    display: "flex",
+    alignItems: "center",
+    gap: "7px",
+    flexWrap: "wrap",
+    padding: "8px",
+    borderRadius: "16px",
+    background: "linear-gradient(135deg, rgba(8,22,40,0.96), rgba(15,23,42,0.78))",
+    border: "1px solid rgba(56,189,248,0.22)",
+    backdropFilter: "blur(12px)",
+    boxShadow: "0 14px 34px rgba(0,0,0,0.32), inset 0 1px 0 rgba(255,255,255,0.08)",
+    cursor: "grab",
+    userSelect: "none",
+  },
+
+  dockResetButton: {
+    height: "20px",
+    width: "26px",
+    padding: 0,
+    borderRadius: "8px",
+    border: "1px solid rgba(56,189,248,0.28)",
+    background: "rgba(14,165,233,0.22)",
+    color: "#e0f2fe",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "none",
+  },
+
+  dockDragHandle: {
+    height: "26px",
+    padding: "0 8px",
+    borderRadius: "10px",
+    background: "rgba(2,6,23,0.45)",
+    border: "1px solid rgba(148,163,184,0.12)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    color: "#67e8f9",
+    fontSize: "11px",
+    fontWeight: "950",
+    letterSpacing: "1px",
+    textTransform: "uppercase",
+    cursor: "grab",
+  },
+
   loginPage: {
     minHeight: "100vh",
     width: "100vw",
@@ -2498,14 +4065,12 @@ const styles = {
   },
 
   page: {
-    background: "#050b18",
-    color: "white",
-    height: "100vh",
-    width: "100vw",
-    padding: "18px",
-    fontFamily: "Arial, sans-serif",
-    overflow: "hidden",
-    paddingBottom: "8px",
+    minHeight: "100vh",
+    background: "#020817",
+    color: "#e5e7eb",
+    paddingTop: "88px",
+    paddingBottom: "132px",
+    position: "relative",
   },
 
   title: {
@@ -2771,13 +4336,41 @@ const styles = {
     boxShadow: "0 0 18px rgba(34,197,94,0.26), inset 0 1px 0 rgba(255,255,255,0.20)",
   },
 
-  weekCalendarButton: {height: "44px", minWidth: "82px", padding: "5px 12px", borderRadius: "14px", border: "1px solid rgba(248,113,113,0.45)", background: "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)", color: "#fff", fontWeight: "950", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", boxShadow: "0 0 18px rgba(239,68,68,0.28), inset 0 1px 0 rgba(255,255,255,0.18)"},
+  weekCalendarButton: {
+    height: "44px",
+    minWidth: "86px",
+    padding: "5px 12px",
+    borderRadius: "14px",
+    border: "1px solid rgba(248,113,113,0.45)",
+    background: "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)",
+    color: "#ffffff",
+    fontWeight: "950",
+    cursor: "pointer",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   weekCalendarLabel: {fontSize: "10px", lineHeight: 1, opacity: 0.9, textTransform: "uppercase", letterSpacing: "0.8px"},
 
   weekCalendarNumber: {fontSize: "20px", lineHeight: 1.1},
 
-  dateMiniBox: {height: "44px", padding: "6px 11px", borderRadius: "14px", border: "1px solid rgba(56,189,248,0.22)", background: "rgba(15,23,42,0.70)", color: "#e2e8f0", display: "flex", flexDirection: "column", justifyContent: "center", fontSize: "11px", fontWeight: "800", whiteSpace: "nowrap", textTransform: "capitalize"},
+  dateMiniBox: {
+    height: "44px",
+    padding: "6px 12px",
+    borderRadius: "14px",
+    border: "1px solid rgba(56,189,248,0.22)",
+    background: "rgba(15,23,42,0.72)",
+    color: "#e2e8f0",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    fontSize: "11px",
+    fontWeight: "900",
+    whiteSpace: "nowrap",
+    textTransform: "capitalize",
+  },
 
   calendarOverlay: {position: "fixed", inset: 0, zIndex: 10030, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(2, 6, 23, 0.70)", backdropFilter: "blur(10px)"},
 
@@ -2967,17 +4560,14 @@ const styles = {
   },
 
   leftHeaderDock: {
-    position: "absolute",
-    top: "16px",
-    left: "18px",
-    zIndex: 210,
+    display: "none",
   },
 
   rightHeaderDock: {
     position: "absolute",
-    top: "16px",
+    top: "84px",
     right: "18px",
-    zIndex: 210,
+    zIndex: 300,
   },
 
   timeMachineBar: {
@@ -3012,18 +4602,20 @@ const styles = {
 
 
   userBadge: {
-    maxWidth: "230px",
-    padding: "9px 12px",
+    maxWidth: "190px",
+    height: "34px",
+    padding: "0 11px",
+    display: "flex",
+    alignItems: "center",
     background: "linear-gradient(180deg, rgba(2,6,23,0.88), rgba(15,23,42,0.74))",
     color: "#e2e8f0",
-    border: "1px solid rgba(34, 197, 94, 0.38)",
+    border: "1px solid rgba(34,197,94,0.30)",
     borderRadius: "999px",
     fontWeight: "900",
-    fontSize: "12px",
+    fontSize: "11px",
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",
-    boxShadow: "0 0 14px rgba(34,197,94,0.20)",
   },
 
   saveButtonManual: {
@@ -3360,34 +4952,39 @@ const styles = {
   },
 
   excelTabsBar: {
+    position: "fixed",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: "72px",
+    zIndex: 1000,
     display: "flex",
-    alignItems: "center",
-    gap: "4px",
-    padding: "7px 10px",
-    marginTop: "8px",
-    background: "linear-gradient(180deg, rgba(226,232,240,0.92), rgba(203,213,225,0.92))",
-    borderTop: "1px solid rgba(15,23,42,0.16)",
-    borderBottom: "1px solid rgba(15,23,42,0.16)",
-    overflowX: "auto",
+    alignItems: "flex-start",
+    gap: "8px",
+    padding: "10px 10px 0 10px",
+    background: "linear-gradient(180deg, rgba(226,238,248,0.96) 0%, rgba(190,207,220,0.98) 100%)",
+    borderTop: "1px solid rgba(15,23,42,0.25)",
+    boxShadow: "0 -14px 24px rgba(2,6,23,0.35)",
   },
 
   excelTab: {
-    padding: "8px 14px",
-    borderRadius: "10px 10px 0 0",
-    border: "1px solid rgba(15,23,42,0.14)",
+    padding: "8px 16px",
+    borderRadius: "12px 12px 0 0",
+    border: "1px solid rgba(15,23,42,0.16)",
     background: "linear-gradient(180deg, #f8fafc, #e2e8f0)",
     color: "#0f172a",
-    fontWeight: "900",
+    fontWeight: "950",
     cursor: "grab",
     whiteSpace: "nowrap",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.65)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.70)",
   },
 
   excelTabActive: {
     background: "linear-gradient(180deg, #ffffff, #dbeafe)",
     color: "#047857",
     borderBottom: "3px solid #22c55e",
-    boxShadow: "0 -2px 12px rgba(34,197,94,0.16)",
+    boxShadow: "0 -3px 14px rgba(34,197,94,0.20)",
+    transform: "translateY(-2px)",
   },
 
   accountDeleteButton: {
@@ -3417,15 +5014,196 @@ const styles = {
     animation: "pageFadeSlide 0.28s ease both",
   },
 
-  panel: {
-    background: "linear-gradient(180deg, rgba(8, 22, 40, 0.88), rgba(5, 13, 26, 0.88))",
-    backdropFilter: "blur(10px)",
-    border: "1px solid rgba(56, 189, 248, 0.24)",
-    borderRadius: "14px",
-    padding: "12px",
+  accountHeaderClean: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "16px",
     marginBottom: "10px",
-    animation: "fadeSlideUp 0.25s ease-out",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 30px rgba(0,0,0,0.28), 0 0 22px rgba(56,189,248,0.06)",
+    paddingRight: "0",
+  },
+
+  panelSubtitle: {
+    marginTop: "4px",
+    color: "#94a3b8",
+    fontSize: "12px",
+    fontWeight: "800",
+  },
+
+  commandCenter: {
+    display: "grid",
+    gridTemplateColumns: "minmax(320px, 0.9fr) minmax(520px, 1.4fr) minmax(520px, 1.3fr)",
+    alignItems: "center",
+    gap: "12px",
+    padding: "12px",
+    borderRadius: "20px",
+    background: "linear-gradient(135deg, rgba(8,22,40,0.88), rgba(15,23,42,0.66))",
+    border: "1px solid rgba(56,189,248,0.22)",
+    backdropFilter: "blur(12px)",
+  },
+
+  commandGroup: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    flexWrap: "wrap",
+    padding: "8px",
+    borderRadius: "16px",
+    background: "rgba(2,6,23,0.36)",
+    border: "1px solid rgba(148,163,184,0.10)",
+  },
+
+  commandLabel: {
+    color: "#67e8f9",
+    fontSize: "10px",
+    fontWeight: "950",
+    letterSpacing: "1px",
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
+  },
+
+  cleanButton: {
+    height: "34px",
+    padding: "0 12px",
+    borderRadius: "10px",
+    border: "1px solid rgba(56,189,248,0.34)",
+    background: "linear-gradient(180deg, #0ea5e9 0%, #075985 100%)",
+    color: "#f0f9ff",
+    fontWeight: "900",
+    fontSize: "12px",
+    cursor: "pointer",
+    boxShadow: "0 0 10px rgba(56,189,248,0.16), inset 0 1px 0 rgba(255,255,255,0.14)",
+    whiteSpace: "nowrap",
+  },
+
+  cleanWarningButton: {
+    height: "34px",
+    padding: "0 12px",
+    borderRadius: "10px",
+    border: "1px solid rgba(251,146,60,0.34)",
+    background: "linear-gradient(180deg, #f97316 0%, #9a3412 100%)",
+    color: "#fff7ed",
+    fontWeight: "900",
+    fontSize: "12px",
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+
+  cleanLogoutButton: {
+    height: "34px",
+    padding: "0 12px",
+    borderRadius: "10px",
+    border: "1px solid rgba(248,113,113,0.34)",
+    background: "linear-gradient(180deg, #991b1b 0%, #450a0a 100%)",
+    color: "#fee2e2",
+    fontWeight: "900",
+    fontSize: "12px",
+    cursor: "pointer",
+    whiteSpace: "nowrap",
+  },
+
+  cleanDangerIconButton: {
+    height: "34px",
+    width: "36px",
+    borderRadius: "10px",
+    border: "1px solid rgba(248,113,113,0.34)",
+    background: "linear-gradient(180deg, #ef4444 0%, #7f1d1d 100%)",
+    color: "#ffffff",
+    fontWeight: "900",
+    cursor: "pointer",
+  },
+
+  accountSelectClean: {
+    height: "34px",
+    minWidth: "190px",
+    borderRadius: "10px",
+    border: "1px solid rgba(56,189,248,0.22)",
+    background: "#ffffff",
+    color: "#0f172a",
+    padding: "0 9px",
+    fontWeight: "850",
+    fontSize: "12px",
+  },
+
+  accountInputClean: {
+    height: "34px",
+    width: "140px",
+    borderRadius: "10px",
+    border: "1px solid rgba(148,163,184,0.20)",
+    background: "rgba(255,255,255,0.96)",
+    color: "#0f172a",
+    padding: "0 9px",
+    fontWeight: "800",
+    fontSize: "12px",
+  },
+
+  weekCalendarButtonClean: {
+    height: "34px",
+    padding: "0 11px",
+    minWidth: "52px",
+    borderRadius: "10px",
+    border: "1px solid rgba(248,113,113,0.38)",
+    background: "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)",
+    color: "#ffffff",
+    fontWeight: "950",
+    fontSize: "12px",
+    cursor: "pointer",
+  },
+
+  dateMiniBoxClean: {
+    height: "34px",
+    padding: "0 11px",
+    borderRadius: "10px",
+    border: "1px solid rgba(56,189,248,0.16)",
+    background: "rgba(15,23,42,0.72)",
+    color: "#cbd5e1",
+    display: "flex",
+    alignItems: "center",
+    fontSize: "12px",
+    fontWeight: "900",
+    whiteSpace: "nowrap",
+    textTransform: "capitalize",
+  },
+
+  headerToolsDock: {
+    display: "none",
+  },
+
+  headerToolsRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: "7px",
+    flexWrap: "wrap",
+  },
+
+  commandCenterSimple: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: "12px",
+    padding: "12px",
+    borderRadius: "18px",
+    background: "linear-gradient(135deg, rgba(8,22,40,0.78), rgba(15,23,42,0.50))",
+    border: "1px solid rgba(56,189,248,0.18)",
+    maxWidth: "620px",
+  },
+
+  commandGroupSimple: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    flexWrap: "wrap",
+  },
+
+  panel: {
+    padding: "13px",
+    borderRadius: "18px",
+    background: "linear-gradient(135deg, rgba(8,22,40,0.82), rgba(15,23,42,0.58))",
+    border: "1px solid rgba(56,189,248,0.20)",
+    boxShadow: "0 14px 38px rgba(0,0,0,0.24), inset 0 1px 0 rgba(255,255,255,0.06)",
+    overflow: "visible",
+    height: "100%",
   },
 
   panelTitle: {
@@ -3502,10 +5280,9 @@ const styles = {
 
   formPro: {
     display: "flex",
-    gap: "10px",
     alignItems: "center",
-    flexWrap: "nowrap",
-    width: "100%",
+    gap: "8px",
+    flexWrap: "wrap",
   },
 
   selectDepense: {
@@ -3545,15 +5322,14 @@ const styles = {
   },
 
   modeSelectTable: {
-    width: "92%",
     height: "26px",
-    borderRadius: "6px",
-    border: "1px solid rgba(37, 99, 235, 0.25)",
-    background: "linear-gradient(180deg, #ffffff, #eef6ff)",
+    borderRadius: "7px",
+    border: "1px solid #bfdbfe",
+    background: "#eff6ff",
     color: "#0f172a",
-    fontWeight: "900",
+    fontWeight: "650",
     fontSize: "11px",
-    textAlign: "center",
+    outline: "none",
     cursor: "pointer",
   },
 
@@ -3578,39 +5354,50 @@ const styles = {
   assistantTeslaButton: {
     height: "38px",
     padding: "0 18px",
-    borderRadius: "999px",
+    borderRadius: "12px",
     border: "1px solid rgba(103, 232, 249, 0.46)",
     background: "linear-gradient(180deg, #0ea5e9 0%, #075985 100%)",
     color: "#f0f9ff",
     fontSize: "13px",
     fontWeight: "950",
-    letterSpacing: "0.4px",
+    letterSpacing: "0.2px",
     cursor: "pointer",
     display: "inline-flex",
     alignItems: "center",
-    gap: "8px",
+    justifyContent: "center",
+    gap: "6px",
     boxShadow: "0 0 18px rgba(56,189,248,0.24), inset 0 1px 0 rgba(255,255,255,0.16)",
-    animation: "teslaGlow 2.4s ease-in-out infinite",
   },
 
-  assistantPulseDot: {
-    width: "18px",
-    height: "18px",
-    borderRadius: "999px",
-    display: "inline-flex",
+
+  blocLeftTools: {
+    display: "flex",
     alignItems: "center",
-    justifyContent: "center",
-    background: "rgba(255,255,255,0.18)",
-    color: "#ffffff",
-    fontSize: "12px",
-    animation: "teslaPulse 1.8s infinite",
+    gap: "12px",
+    flexWrap: "wrap",
+  },
+
+  floatingHeaderDock: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: "10px",
+    padding: "8px",
+    borderRadius: "18px",
+    background: "linear-gradient(135deg, rgba(8,22,40,0.84), rgba(15,23,42,0.62))",
+    border: "1px solid rgba(56,189,248,0.22)",
+    backdropFilter: "blur(12px)",
+    animation: "floatingHeaderPulse 3.2s ease-in-out infinite",
+    marginLeft: "auto",
   },
 
   selectOnlyRow: {
     display: "flex",
     alignItems: "center",
-    gap: "12px",
+    justifyContent: "space-between",
+    gap: "16px",
     flexWrap: "wrap",
+    width: "100%",
   },
 
   blocSelect: {
@@ -3675,15 +5462,15 @@ const styles = {
   },
 
   button: {
-    padding: "11px 18px",
-    background: "linear-gradient(180deg, #facc15 0%, #b8860b 100%)",
-    border: "1px solid rgba(250, 204, 21, 0.42)",
-    borderRadius: "10px",
-    cursor: "pointer",
+    height: "38px",
+    padding: "0 18px",
+    background: "linear-gradient(180deg, #facc15 0%, #ca8a04 100%)",
     color: "#111827",
-    fontWeight: "900",
-    fontSize: "14px",
-    boxShadow: "0 0 18px rgba(250,204,21,0.22), inset 0 1px 0 rgba(255,255,255,0.35)",
+    border: "1px solid rgba(250,204,21,0.52)",
+    borderRadius: "12px",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 0 14px rgba(250,204,21,0.20), inset 0 1px 0 rgba(255,255,255,0.22)",
   },
 
   secondaryButton: {
@@ -3713,14 +5500,14 @@ const styles = {
 
   tableWrapper: {
     width: "100%",
-    height: "calc(100vh - 420px)",
-    minHeight: "330px",
+    height: "calc(100vh - 365px)",
+    minHeight: "320px",
     overflow: "auto",
-    borderRadius: "14px",
-    border: "1px solid rgba(56, 189, 248, 0.26)",
-    background: "#f8fafc",
-    animation: "fadeSlideUp 0.30s ease-out",
-    boxShadow: "0 18px 48px rgba(0,0,0,0.34), 0 0 26px rgba(56,189,248,0.08), inset 0 1px 0 rgba(255,255,255,0.10)",
+    background: "#ffffff",
+    borderTop: "1px solid rgba(147,197,253,0.40)",
+    borderBottom: "1px solid rgba(147,197,253,0.40)",
+    paddingBottom: "145px",
+    scrollPaddingBottom: "145px",
   },
 
   table: {
@@ -3733,17 +5520,17 @@ const styles = {
   },
 
   th: {
-    background: "linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%)",
+    position: "sticky",
+    top: 0,
+    zIndex: 50,
+    background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
     color: "#ffffff",
-    borderRight: "1px solid rgba(15, 23, 42, 0.24)",
-    borderBottom: "1px solid rgba(15, 23, 42, 0.30)",
-    padding: "7px",
-    height: "30px",
+    fontWeight: "800",
+    fontSize: "12px",
+    padding: "6px",
+    borderRight: "1px solid rgba(15,23,42,0.22)",
     textAlign: "center",
-    zIndex: 20,
-    fontWeight: "900",
-    letterSpacing: "0.35px",
-    textTransform: "uppercase",
+    whiteSpace: "nowrap",
   },
 
   thSmall: {
@@ -3796,32 +5583,33 @@ const styles = {
   },
 
   blocRow: {
-    background: "linear-gradient(90deg, #e0f2fe 0%, #bfdbfe 55%, #dbeafe 100%)",
+    background: "linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)",
     color: "#0f172a",
-    fontWeight: "900",
-    fontSize: "15px",
+    fontWeight: "800",
+    fontSize: "13px",
     textAlign: "center",
-    borderRight: "1px solid rgba(15, 23, 42, 0.20)",
-    borderBottom: "1px solid rgba(15, 23, 42, 0.20)",
-    height: "30px",
-    zIndex: 12,
-    letterSpacing: "0.7px",
-    textTransform: "uppercase",
+    letterSpacing: "0.2px",
+    borderTop: "1px solid #93c5fd",
+    borderBottom: "1px solid #93c5fd",
   },
 
   td: {
-    borderRight: "1px solid rgba(15, 23, 42, 0.22)",
-    borderBottom: "1px solid rgba(15, 23, 42, 0.22)",
-    padding: "4px",
-    height: "25px",
+    borderRight: "1px solid rgba(15, 23, 42, 0.16)",
+    borderBottom: "1px solid rgba(15, 23, 42, 0.16)",
+    padding: "4px 6px",
+    height: "28px",
     textAlign: "center",
-    whiteSpace: "nowrap",
+    color: "#0f172a",
+    fontSize: "12px",
+    fontWeight: "550",
     background: "#ffffff",
-    color: "#111827",
   },
 
   tdLeft: {
     textAlign: "left",
+    color: "#0f172a",
+    fontWeight: "650",
+    background: "#ffffff",
   },
 
   yellowCell: {
@@ -3829,32 +5617,33 @@ const styles = {
   },
 
   yellowInputCell: {
-    background: "linear-gradient(180deg, #fff7d6 0%, #f6c94a 100%)",
-    color: "#111827",
-    fontWeight: "900",
-    boxShadow: "inset 0 0 0 1px rgba(120, 80, 0, 0.18), 0 1px 6px rgba(246, 201, 74, 0.25)",
+    background: "#ffffff",
+    border: "1px solid rgba(147,197,253,0.80)",
+    color: "#0f172a",
+    fontWeight: "650",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
   },
 
   accumuleCell: {
-    background: "linear-gradient(180deg, #ffffff 0%, #eef6ff 100%)",
+    background: "#f8fafc",
     color: "#0f172a",
-    fontWeight: "900",
-    boxShadow: "inset 0 0 0 1px rgba(37, 99, 235, 0.10)",
+    fontWeight: "650",
+    borderLeft: "1px solid rgba(148,163,184,0.55)",
   },
 
   redText: {
-    color: "red",
-    fontWeight: "bold",
+    color: "#0f172a",
+    fontWeight: "650",
   },
 
   greenText: {
-    color: "green",
-    fontWeight: "bold",
+    color: "#0f172a",
+    fontWeight: "650",
   },
 
   blueText: {
-    color: "#0070c0",
-    fontWeight: "bold",
+    color: "#0f172a",
+    fontWeight: "650",
   },
 
   weekTopCell: {
@@ -3908,17 +5697,17 @@ const styles = {
   },
 
   totalLeft: {
-    background: "#000",
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: "14px",
+    background: "#020617",
+    color: "#ffffff",
+    fontWeight: "800",
     textAlign: "left",
   },
 
   totalCell: {
-    background: "#000",
-    color: "#fff",
-    fontWeight: "bold",
+    background: "#020617",
+    color: "#ffffff",
+    fontWeight: "800",
+    textAlign: "center",
   },
 
   totalCalendar: {
