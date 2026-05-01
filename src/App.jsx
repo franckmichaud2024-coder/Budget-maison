@@ -12,6 +12,7 @@ const COMPTES_BUDGET = [
 
 const SNAPSHOT_KEY = "budget_maison_snapshots_v1";
 const RESET_PASSWORD = "1234"; // Change ce mot de passe ici
+const SECURITY_SESSION_KEY = "budget_maison_session_active_v1";
 // Login sécurisé via Supabase Auth
 
 function lireSnapshots() {
@@ -178,7 +179,7 @@ const colonnesFixes = [
   { key: "echeance", width: 90 },
   { key: "x", width: 45 },
   { key: "accumule", width: 105 },
-  { key: "action", width: 120 },
+  { key: "action", width: 95 },
 ];
 
 function leftOffset(index) {
@@ -318,22 +319,24 @@ export default function App() {
       return {};
     }
   });
-  const [input3177Actif, setInput3177Actif] = useState(null);
 
   const [showCalendarPanel, setShowCalendarPanel] = useState(false);
   const [calendarDate, setCalendarDate] = useState(new Date());
   const [nowLive, setNowLive] = useState(new Date());
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth : 1920
+  );
   const [dockPositions, setDockPositions] = useState(() => {
     const defaults = {
-      account: { x: 1030, y: 12 },
-      calendar: { x: 1030, y: 76 },
-      user: { x: 1210, y: 76 },
-      actions: { x: 1420, y: 76 },
-      security: { x: 1640, y: 76 },
+      security: { x: 20, y: 28 },
+      calendar: { x: 20, y: 96 },
+      account: { x: 520, y: 28 },
+      actions: { x: 1490, y: 28 },
+      user: { x: 1500, y: 96 },
     };
 
     try {
-      const saved = localStorage.getItem("budget-dock-positions-v2");
+      const saved = localStorage.getItem("budget-dock-positions-v4");
       if (saved) return { ...defaults, ...JSON.parse(saved) };
     } catch (err) {
       // ignore
@@ -619,18 +622,35 @@ export default function App() {
   useEffect(() => {
     let mounted = true;
 
-    async function verifierSession() {
-      const { data } = await supabase.auth.getSession();
+    async function verrouillerAuDemarrage() {
+      // Sécurité bancaire : on ne restaure jamais automatiquement une ancienne session Supabase.
+      // À chaque nouvelle ouverture / rafraîchissement du site, le mot de passe est redemandé.
+      sessionStorage.removeItem(SECURITY_SESSION_KEY);
+      localStorage.removeItem(SECURITY_SESSION_KEY);
+
+      try {
+        await supabase.auth.signOut();
+      } catch (err) {
+        console.warn("Déconnexion de sécurité au démarrage:", err);
+      }
 
       if (mounted) {
-        setSession(data.session);
+        setSession(null);
         setAuthLoading(false);
       }
     }
 
-    verifierSession();
+    verrouillerAuDemarrage();
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      const sessionAutorisee = sessionStorage.getItem(SECURITY_SESSION_KEY) === "true";
+
+      if (!sessionAutorisee) {
+        setSession(null);
+        setAuthLoading(false);
+        return;
+      }
+
       setSession(newSession);
       setAuthLoading(false);
     });
@@ -650,6 +670,13 @@ export default function App() {
   useEffect(() => {
     const timer = setInterval(() => setNowLive(new Date()), 60000);
     return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const updateViewport = () => setViewportWidth(window.innerWidth || 1920);
+    updateViewport();
+    window.addEventListener("resize", updateViewport);
+    return () => window.removeEventListener("resize", updateViewport);
   }, []);
 
   useEffect(() => {
@@ -950,6 +977,10 @@ export default function App() {
     setLoginError("");
     setAuthLoading(true);
 
+    // Important : on autorise la session AVANT l'appel Supabase,
+    // car l'événement onAuthStateChange peut se déclencher immédiatement.
+    sessionStorage.setItem(SECURITY_SESSION_KEY, "true");
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email: loginEmail.trim(),
       password: loginPassword,
@@ -958,6 +989,7 @@ export default function App() {
     setAuthLoading(false);
 
     if (error) {
+      sessionStorage.removeItem(SECURITY_SESSION_KEY);
       setLoginError("Courriel ou mot de passe incorrect.");
       return;
     }
@@ -967,6 +999,7 @@ export default function App() {
   }
 
   async function seDeconnecter() {
+    sessionStorage.removeItem(SECURITY_SESSION_KEY);
     await supabase.auth.signOut();
     setSession(null);
     setLoginEmail("");
@@ -1524,6 +1557,60 @@ export default function App() {
     setShowCalendarPanel(false);
   }
 
+  function dimensionsDock(dockKey) {
+    const dimensions = {
+      account: { width: 900, height: 58 },
+      calendar: { width: 245, height: 58 },
+      user: { width: 320, height: 58 },
+      actions: { width: 420, height: 58 },
+      security: { width: 430, height: 58 },
+    };
+
+    return dimensions[dockKey] || { width: 320, height: 70 };
+  }
+
+  function positionDockResponsive(dockKey) {
+    const largeurEcran = Math.max(1280, viewportWidth || 1920);
+    const marge = 22;
+    const dim = dimensionsDock(dockKey);
+    const saved = dockPositions[dockKey] || { x: marge, y: marge };
+
+    let x = Number(saved.x) || marge;
+    let y = Number(saved.y) || marge;
+
+    if (largeurEcran < 1900) {
+      if (dockKey === "security") {
+        x = marge;
+        y = 28;
+      }
+
+      if (dockKey === "calendar") {
+        x = marge;
+        y = 96;
+      }
+
+      if (dockKey === "account") {
+        x = Math.round((largeurEcran - dim.width) / 2);
+        y = 28;
+      }
+
+      if (dockKey === "actions") {
+        x = largeurEcran - dim.width - marge;
+        y = 28;
+      }
+
+      if (dockKey === "user") {
+        x = largeurEcran - dim.width - 120;
+        y = 96;
+      }
+    }
+
+    x = Math.max(marge, Math.min(x, largeurEcran - dim.width - marge));
+    y = Math.max(10, Math.min(y, 240));
+
+    return { x, y };
+  }
+
   function limiterPositionDock(position, largeurDock = 320, hauteurDock = 70) {
     const maxX = Math.max(10, window.innerWidth - largeurDock - 10);
     const maxY = Math.max(10, window.innerHeight - hauteurDock - 10);
@@ -1536,16 +1623,19 @@ export default function App() {
 
   function sauvegarderPositionsDock(nextPositions) {
     setDockPositions(nextPositions);
-    localStorage.setItem("budget-dock-positions-v2", JSON.stringify(nextPositions));
+    localStorage.setItem("budget-dock-positions-v4", JSON.stringify(nextPositions));
   }
 
   function resetPositionsDock() {
+    const largeurEcran = Math.max(1280, window.innerWidth || 1920);
+    const marge = 22;
+
     const defaults = {
-      account: { x: Math.max(10, window.innerWidth - 870), y: 12 },
-      calendar: { x: Math.max(10, window.innerWidth - 870), y: 76 },
-      user: { x: Math.max(10, window.innerWidth - 690), y: 76 },
-      actions: { x: Math.max(10, window.innerWidth - 470), y: 76 },
-      security: { x: Math.max(10, window.innerWidth - 250), y: 76 },
+      security: { x: marge, y: 28 },
+      calendar: { x: marge, y: 96 },
+      account: { x: Math.round((largeurEcran - dimensionsDock("account").width) / 2), y: 28 },
+      actions: { x: largeurEcran - dimensionsDock("actions").width - marge, y: 28 },
+      user: { x: largeurEcran - dimensionsDock("user").width - 120, y: 96 },
     };
 
     sauvegarderPositionsDock(defaults);
@@ -1566,7 +1656,7 @@ export default function App() {
     const hauteur = options.height || 70;
     const departX = e.clientX;
     const departY = e.clientY;
-    const positionDepart = dockPositions[dockKey] || { x: 10, y: 10 };
+    const positionDepart = positionDockResponsive(dockKey);
 
     function bouger(ev) {
       const nextPosition = limiterPositionDock(
@@ -1640,7 +1730,7 @@ export default function App() {
 
   function modifierValeur3177(id, champ, valeur) {
     const numericValue = String(valeur).replace(",", ".");
-    const cleanValue = numericValue === "" ? "" : round2(Number(numericValue)).toFixed(2);
+    const cleanValue = numericValue === "" ? "" : round2(numericValue);
 
     const nextValues = {
       ...valeurs3177,
@@ -1695,24 +1785,18 @@ export default function App() {
   }
 
   function renduInput3177(ligne, champ, valeur, align = "right") {
-    const cleInput = `${ligne.id}-${champ}`;
     const valeurSauvee = valeurs3177?.[ligne.id]?.[champ];
-    const estActif = input3177Actif === cleInput;
 
-    const valeurAffichee = estActif
-      ? String(valeurSauvee ?? "")
-      : Number(
-          valeurSauvee === undefined || valeurSauvee === null || valeurSauvee === ""
-            ? valeur || 0
-            : valeurSauvee
-        ).toFixed(2);
+    const valeurAffichee =
+      valeurSauvee === undefined || valeurSauvee === null
+        ? Number(valeur || 0).toFixed(2)
+        : String(valeurSauvee);
 
     return (
       <input
         type="text"
         inputMode="decimal"
         value={valeurAffichee}
-        onFocus={() => setInput3177Actif(cleInput)}
         onChange={(e) => {
           const texte = e.target.value.replace(",", ".");
           if (/^-?\d*\.?\d*$/.test(texte)) {
@@ -1726,10 +1810,7 @@ export default function App() {
             sauvegarderValeurs3177(nextValues);
           }
         }}
-        onBlur={(e) => {
-          modifierValeur3177(ligne.id, champ, e.target.value);
-          setInput3177Actif(null);
-        }}
+        onBlur={(e) => modifierValeur3177(ligne.id, champ, e.target.value)}
         style={{
           ...styles.bank3177Input,
           textAlign: align,
@@ -2009,7 +2090,8 @@ export default function App() {
         }
 
         body {
-          overflow: hidden;
+          overflow-x: hidden;
+          overflow-y: auto;
         }
 
         button {
@@ -2083,8 +2165,8 @@ export default function App() {
         onMouseDown={(e) => demarrerDragDock(e, "account", { width: 700, height: 64 })}
         style={{
           ...styles.floatingMiniDock,
-          left: dockPositions.account.x,
-          top: dockPositions.account.y,
+          left: positionDockResponsive("account").x,
+          top: positionDockResponsive("account").y,
           borderColor: weekGlowSoft,
           boxShadow: `0 14px 42px rgba(0,0,0,0.34), 0 0 22px ${weekGlowSoft}, inset 0 1px 0 rgba(255,255,255,0.08)`,
         }}
@@ -2134,8 +2216,8 @@ export default function App() {
         onMouseDown={(e) => demarrerDragDock(e, "calendar", { width: 180, height: 58 })}
         style={{
           ...styles.floatingMiniDock,
-          left: dockPositions.calendar.x,
-          top: dockPositions.calendar.y,
+          left: positionDockResponsive("calendar").x,
+          top: positionDockResponsive("calendar").y,
           borderColor: weekGlowSoft,
           boxShadow: `0 14px 32px rgba(0,0,0,0.30), 0 0 18px ${weekGlowSoft}`,
         }}
@@ -2164,8 +2246,8 @@ export default function App() {
         onMouseDown={(e) => demarrerDragDock(e, "user", { width: 250, height: 58 })}
         style={{
           ...styles.floatingMiniDock,
-          left: dockPositions.user.x,
-          top: dockPositions.user.y,
+          left: positionDockResponsive("user").x,
+          top: positionDockResponsive("user").y,
           borderColor: "rgba(34,197,94,0.28)",
         }}
         title="Glisse cette barre pour la déplacer"
@@ -2178,8 +2260,8 @@ export default function App() {
         onMouseDown={(e) => demarrerDragDock(e, "actions", { width: 280, height: 58 })}
         style={{
           ...styles.floatingMiniDock,
-          left: dockPositions.actions.x,
-          top: dockPositions.actions.y,
+          left: positionDockResponsive("actions").x,
+          top: positionDockResponsive("actions").y,
           borderColor: "rgba(56,189,248,0.28)",
         }}
         title="Glisse cette barre pour la déplacer"
@@ -2199,8 +2281,8 @@ export default function App() {
         onMouseDown={(e) => demarrerDragDock(e, "security", { width: 220, height: 96 })}
         style={{
           ...styles.floatingMiniDock,
-          left: dockPositions.security.x,
-          top: dockPositions.security.y,
+          left: positionDockResponsive("security").x,
+          top: positionDockResponsive("security").y,
           borderColor: "rgba(248,113,113,0.30)",
         }}
         title="Glisse cette barre pour la déplacer"
@@ -2701,10 +2783,22 @@ export default function App() {
                                     <div style={styles.descriptionRowTools}>
                                       <button
                                         onClick={() => commencerEditionInfo(item)}
-                                        style={styles.descriptionEditButtonFull}
+                                        style={styles.descriptionEditButton}
                                         title="Cliquer pour modifier la catégorie / note"
                                       >
                                         {item.description || "-"}
+                                      </button>
+
+                                      <button
+                                        onClick={() => viderXLigne(item)}
+                                        style={{
+                                          ...styles.clearXRowButton,
+                                          opacity: nbX > 0 ? 1 : 0.45,
+                                        }}
+                                        title={nbX > 0 ? `Supprimer les ${nbX} X de cette ligne` : "Aucun X sur cette ligne"}
+                                        type="button"
+                                      >
+                                        🧹 X
                                       </button>
                                     </div>
                                   ),
@@ -2861,31 +2955,15 @@ export default function App() {
                                 {celluleFixe(nbX, 6, { verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(formatArgent(acc), 7, { ...styles.accumuleCell, verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(
-                                  <div style={styles.actionButtonsWrap}>
-                                    <button
-                                      onClick={() => viderXLigne(item)}
-                                      style={{
-                                        ...styles.clearXActionButton,
-                                        opacity: nbX > 0 ? 1 : 0.5,
-                                      }}
-                                      title={nbX > 0 ? `Supprimer les ${nbX} X de cette ligne` : "Aucun X sur cette ligne"}
-                                      type="button"
-                                    >
-                                      🧹 X
-                                    </button>
-
-                                    <button
-                                      className="delete-row-button"
-                                      onClick={() => supprimerLigne(item)}
-                                      style={styles.deleteButton}
-                                      title="Supprimer cette ligne"
-                                      type="button"
-                                    >
-                                      🗑️
-                                    </button>
-                                  </div>,
+                                  <button
+                                    className="delete-row-button"
+                                    onClick={() => supprimerLigne(item)}
+                                    style={styles.deleteButton} title="Supprimer cette ligne"
+                                   title="Supprimer la ligne">
+                                    🗑️
+                                  </button>,
                                   8,
-                                  { ...styles.actionStickyCell, verticalAlign: "middle" },
+                                  { verticalAlign: "middle" },
                                   { rowSpan: 2 }
                                 )}
 
@@ -3111,14 +3189,11 @@ const styles = {
   bank3177FooterGains: {
     gridColumn: "2 / 3",
     justifyContent: "center",
-    justifySelf: "center",
   },
 
   bank3177FooterSolde: {
     gridColumn: "4 / 5",
     justifyContent: "center",
-    justifySelf: "center",
-    transform: "translateX(-18px)",
   },
 
   bank3177FooterSpacer: {
@@ -3130,38 +3205,38 @@ const styles = {
     height: "40px",
     padding: "0 14px",
     borderRadius: "12px",
-    border: "1px solid rgba(34,197,94,0.85)",
-    background: "linear-gradient(180deg, #071a12 0%, #020617 100%)",
-    color: "#86efac",
+    border: "1px solid rgba(56,189,248,0.75)",
+    background: "linear-gradient(180deg, #ffffff 0%, #eef7ff 100%)",
+    color: "#020617",
     fontSize: "18px",
     fontWeight: "950",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "flex-end",
     fontVariantNumeric: "tabular-nums",
-    boxShadow: "0 0 20px rgba(34,197,94,0.35), inset 0 1px 0 rgba(255,255,255,0.16)",
+    boxShadow: "0 0 18px rgba(56,189,248,0.24), inset 0 1px 0 rgba(255,255,255,0.95)",
   },
 
   bank3177FooterLabel: {
-    color: "#0f172a",
+    color: "#334155",
     fontSize: "12px",
-    fontWeight: "900",
+    fontWeight: "750",
     textTransform: "uppercase",
-    letterSpacing: "0.8px",
+    letterSpacing: "0.6px",
     whiteSpace: "nowrap",
   },
 
   bank3177Footer: {
-    height: "72px",
-    minHeight: "72px",
-    padding: "10px 22px 10px 0",
+    height: "70px",
+    minHeight: "70px",
+    padding: "10px 0",
     display: "grid",
     gridTemplateColumns: "31% 11% 47% 11%",
     alignItems: "center",
     gap: "0",
-    background: "linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)",
-    borderTop: "1px solid rgba(56,189,248,0.55)",
-    boxShadow: "0 -12px 28px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.75)",
+    background: "linear-gradient(180deg, #eaf3ff 0%, #dbeafe 100%)",
+    borderTop: "1px solid rgba(56,189,248,0.45)",
+    boxShadow: "0 -10px 24px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.75)",
   },
 
   bank3177BottomSpacer: {
@@ -3195,15 +3270,14 @@ const styles = {
     width: "100%",
     height: "24px",
     borderRadius: "7px",
-    border: "1px solid #93c5fd",
-    background: "linear-gradient(180deg, #ffffff 0%, #f0f9ff 100%)",
-    color: "#020617",
-    fontWeight: "800",
+    border: "1px solid #bfdbfe",
+    background: "#f8fbff",
+    color: "#0f172a",
+    fontWeight: "550",
     fontSize: "12px",
     padding: "0 6px",
     outline: "none",
     fontVariantNumeric: "tabular-nums",
-    boxShadow: "inset 0 1px 2px rgba(15,23,42,0.08)",
   },
 
   bank3177TdInput: {
@@ -3389,12 +3463,12 @@ const styles = {
   },
 
   bank3177Shell: {
-    width: "calc(100vw - 12px)",
+    width: "calc(100vw - 24px)",
     maxWidth: "none",
     height: "calc(100vh - 305px)",
     minHeight: "390px",
     margin: "0 auto",
-    borderRadius: "14px",
+    borderRadius: "18px",
     border: "1px solid rgba(147,197,253,0.42)",
     background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)",
     overflow: "hidden",
@@ -3515,23 +3589,6 @@ const styles = {
     textAlign: "left",
   },
 
-  descriptionEditButtonFull: {
-    minHeight: "24px",
-    width: "100%",
-    padding: "2px 6px",
-    border: "1px solid rgba(15,23,42,0.18)",
-    background: "#ffffff",
-    color: "#0f172a",
-    borderRadius: "4px",
-    fontSize: "12px",
-    fontWeight: "650",
-    cursor: "pointer",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    textAlign: "left",
-  },
-
   clearXRowButton: {
     minWidth: "58px",
     height: "26px",
@@ -3545,35 +3602,6 @@ const styles = {
     cursor: "pointer",
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
     whiteSpace: "nowrap",
-  },
-
-  clearXActionButton: {
-    minWidth: "62px",
-    height: "28px",
-    padding: "0 8px",
-    borderRadius: "9px",
-    border: "1px solid #bfdbfe",
-    background: "#eff6ff",
-    color: "#334155",
-    fontWeight: "750",
-    fontSize: "11px",
-    cursor: "pointer",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.78)",
-    whiteSpace: "nowrap",
-  },
-
-  actionButtonsWrap: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "6px",
-    width: "100%",
-  },
-
-  actionStickyCell: {
-    zIndex: 96,
-    background: "#f8fbff",
-    boxShadow: "2px 0 0 rgba(15,23,42,0.28), inset -1px 0 0 rgba(59,130,246,0.18)",
   },
 
   descriptionRowTools: {
@@ -3964,7 +3992,11 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: "7px",
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
+    width: "max-content",
+    minWidth: "max-content",
+    maxWidth: "none",
+    overflow: "visible",
     padding: "8px",
     borderRadius: "16px",
     background: "linear-gradient(135deg, rgba(8,22,40,0.96), rgba(15,23,42,0.78))",
@@ -5751,8 +5783,8 @@ const styles = {
     fontWeight: "900",
     lineHeight: "24px",
     boxShadow: "0 0 14px rgba(239,68,68,0.30), inset 0 1px 0 rgba(255,255,255,0.25)",
-    opacity: 1,
-    transform: "scale(1)",
+    opacity: 0,
+    transform: "scale(0.92)",
     transition: "opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease",
   },
 
