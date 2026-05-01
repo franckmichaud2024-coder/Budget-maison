@@ -1,4 +1,3 @@
-<h1 style={{color:"red"}}>TEST VERSION NEW</h1>
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabase";
 
@@ -179,7 +178,7 @@ const colonnesFixes = [
   { key: "echeance", width: 90 },
   { key: "x", width: 45 },
   { key: "accumule", width: 105 },
-  { key: "action", width: 155 },
+  { key: "action", width: 95 },
 ];
 
 function leftOffset(index) {
@@ -319,8 +318,6 @@ export default function App() {
       return {};
     }
   });
-
-  const [input3177Actif, setInput3177Actif] = useState(null);
 
   const [showCalendarPanel, setShowCalendarPanel] = useState(false);
   const [calendarDate, setCalendarDate] = useState(new Date());
@@ -1641,9 +1638,8 @@ export default function App() {
   }
 
   function modifierValeur3177(id, champ, valeur) {
-    const numericValue = String(valeur ?? "").replace(",", ".").trim();
-    const nombre = numericValue === "" ? 0 : Number(numericValue);
-    const cleanValue = Number.isFinite(nombre) ? round2(nombre) : 0;
+    const numericValue = String(valeur).replace(",", ".");
+    const cleanValue = numericValue === "" ? "" : round2(numericValue);
 
     const nextValues = {
       ...valeurs3177,
@@ -1698,27 +1694,18 @@ export default function App() {
   }
 
   function renduInput3177(ligne, champ, valeur, align = "right") {
-    const inputKey = `${ligne.id}-${champ}`;
     const valeurSauvee = valeurs3177?.[ligne.id]?.[champ];
-    const valeurBrute =
-      valeurSauvee === undefined || valeurSauvee === null || valeurSauvee === ""
-        ? valeur
-        : valeurSauvee;
 
     const valeurAffichee =
-      input3177Actif === inputKey
-        ? String(valeurBrute ?? "")
-        : Number(valeurBrute || 0).toFixed(2);
+      valeurSauvee === undefined || valeurSauvee === null
+        ? Number(valeur || 0).toFixed(2)
+        : String(valeurSauvee);
 
     return (
       <input
         type="text"
         inputMode="decimal"
         value={valeurAffichee}
-        onFocus={(e) => {
-          setInput3177Actif(inputKey);
-          requestAnimationFrame(() => e.target.select());
-        }}
         onChange={(e) => {
           const texte = e.target.value.replace(",", ".");
           if (/^-?\d*\.?\d*$/.test(texte)) {
@@ -1732,10 +1719,7 @@ export default function App() {
             sauvegarderValeurs3177(nextValues);
           }
         }}
-        onBlur={(e) => {
-          modifierValeur3177(ligne.id, champ, e.target.value);
-          setInput3177Actif(null);
-        }}
+        onBlur={(e) => modifierValeur3177(ligne.id, champ, e.target.value)}
         style={{
           ...styles.bank3177Input,
           textAlign: align,
@@ -2073,6 +2057,32 @@ export default function App() {
           100% { transform: translateX(120%); }
         }
 
+
+        @keyframes tradingPulse {
+          0%, 100% { box-shadow: 0 0 14px rgba(34,197,94,0.18), inset 0 1px 0 rgba(255,255,255,0.10); }
+          50% { box-shadow: 0 0 28px rgba(34,197,94,0.34), inset 0 1px 0 rgba(255,255,255,0.16); }
+        }
+
+        @keyframes marketLine {
+          0% { transform: translateX(-18%); opacity: 0.24; }
+          50% { opacity: 0.46; }
+          100% { transform: translateX(18%); opacity: 0.24; }
+        }
+
+        .budget-row {
+          transition: transform 0.16s ease, filter 0.16s ease;
+        }
+
+        .budget-row:hover {
+          transform: translateX(2px);
+          filter: brightness(1.015);
+        }
+
+        .budget-row:hover .delete-row-button {
+          opacity: 1 !important;
+          transform: scale(1) !important;
+        }
+
       `}</style>
 
       <div style={styles.page}>
@@ -2087,6 +2097,14 @@ export default function App() {
           <div style={styles.titleSmall}>Budget personnel · Interface PRO</div>
           <h1 style={styles.title}>DASHBOARD BUDGET MAISON</h1>
         </div>
+      </div>
+
+      <div style={styles.marketTickerBar}>
+        <span style={styles.marketTickerPositive}>● LIVE</span>
+        <span>Budget Maison</span>
+        <span style={styles.marketTickerPositive}>GAIN {formatArgent(totalRevenus)}</span>
+        <span style={styles.marketTickerNegative}>DÉPENSES {formatArgent(totalDepenses)}</span>
+        <span style={solde >= 0 ? styles.marketTickerPositive : styles.marketTickerNegative}>SOLDE {formatArgent(solde)}</span>
       </div>
 
       <div
@@ -2711,7 +2729,7 @@ export default function App() {
                                     <div style={styles.descriptionRowTools}>
                                       <button
                                         onClick={() => commencerEditionInfo(item)}
-                                        style={styles.descriptionEditButtonFull}
+                                        style={styles.descriptionEditButton}
                                         title="Cliquer pour modifier la catégorie / note"
                                       >
                                         {item.description || "-"}
@@ -2871,24 +2889,31 @@ export default function App() {
                                 {celluleFixe(nbX, 6, { verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(formatArgent(acc), 7, { ...styles.accumuleCell, verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(
-                                  <div style={styles.actionUltraGroup}>
+                                  <div style={styles.rowActionButtons}>
                                     <button
                                       onClick={() => viderXLigne(item)}
-                                      style={{...styles.actionClearXButton, opacity: nbX > 0 ? 1 : 0.42, cursor: nbX > 0 ? "pointer" : "not-allowed"}}
+                                      style={{
+                                        ...styles.clearXRowButton,
+                                        opacity: nbX > 0 ? 1 : 0.38,
+                                      }}
                                       title={nbX > 0 ? `Effacer les ${nbX} X de cette ligne` : "Aucun X à effacer"}
                                       type="button"
-                                      disabled={nbX === 0}
-                                    >🧹</button>
+                                    >
+                                      🧹 X
+                                    </button>
+
                                     <button
                                       className="delete-row-button"
                                       onClick={() => supprimerLigne(item)}
-                                      style={styles.actionDeleteButton}
+                                      style={styles.deleteButton}
                                       title="Supprimer la ligne"
                                       type="button"
-                                    >🗑️</button>
+                                    >
+                                      🗑️
+                                    </button>
                                   </div>,
                                   8,
-                                  { ...styles.actionUltraStickyCell, verticalAlign: "middle" },
+                                  { ...styles.actionStickyCell, verticalAlign: "middle" },
                                   { rowSpan: 2 }
                                 )}
 
@@ -2904,12 +2929,13 @@ export default function App() {
                                         ...styles.weekTopCell,
                                         background: payee
                                           ? isDepense
-                                            ? "#ff1b1b"
-                                            : "#0058ff"
+                                            ? "linear-gradient(180deg, #ff3131 0%, #b91c1c 100%)"
+                                            : "linear-gradient(180deg, #22c55e 0%, #047857 100%)"
                                           : isEcheance
-                                          ? "#c6e0b4"
+                                          ? "linear-gradient(180deg, #bbf7d0 0%, #86efac 100%)"
                                           : "#ffffff",
-                                        color: payee ? "#000" : "#000",
+                                        color: payee ? "#ffffff" : "#000",
+                                        boxShadow: payee ? "inset 0 0 0 1px rgba(255,255,255,0.22), 0 0 8px rgba(34,197,94,0.22)" : "none",
                                         outline: "none",
                                       }}
                                     >
@@ -2945,10 +2971,10 @@ export default function App() {
                                         ...styles.weekCell,
                                         background: payee
                                           ? isDepense
-                                            ? "#ff1b1b"
-                                            : "#0058ff"
+                                            ? "linear-gradient(180deg, #ff3131 0%, #b91c1c 100%)"
+                                            : "linear-gradient(180deg, #22c55e 0%, #047857 100%)"
                                           : isEcheance
-                                          ? "#c6e0b4"
+                                          ? "linear-gradient(180deg, #bbf7d0 0%, #86efac 100%)"
                                           : "#ffffff",
                                         outline: "none",
                                       }}
@@ -3115,9 +3141,9 @@ const styles = {
   },
 
   bank3177FooterValue: {
-    minWidth: "128px",
+    minWidth: "150px",
     height: "38px",
-    padding: "0 10px",
+    padding: "0 14px",
     borderRadius: "12px",
     border: "1px solid #93c5fd",
     background: "#ffffff",
@@ -3142,9 +3168,9 @@ const styles = {
   bank3177Footer: {
     height: "64px",
     minHeight: "64px",
-    padding: "10px 14px",
+    padding: "10px 18px",
     display: "grid",
-    gridTemplateColumns: "31% 16% 29% 24%",
+    gridTemplateColumns: "31% 11% 47% 11%",
     alignItems: "center",
     gap: "0",
     background: "linear-gradient(180deg, #f8fafc 0%, #eaf3ff 100%)",
@@ -3498,36 +3524,34 @@ const styles = {
     whiteSpace: "nowrap",
     textAlign: "left",
   },
-  descriptionEditButtonFull: {
-    minHeight: "24px",
-    width: "100%",
-    padding: "2px 6px",
-    border: "1px solid rgba(15,23,42,0.18)",
-    background: "#ffffff",
-    color: "#0f172a",
-    borderRadius: "4px",
-    fontSize: "12px",
-    fontWeight: "650",
-    cursor: "pointer",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    textAlign: "left",
+
+  rowActionButtons: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    height: "100%",
+    padding: "0 6px",
   },
 
+  actionStickyCell: {
+    background: "linear-gradient(180deg, #ecfeff 0%, #f0fdf4 100%)",
+    borderLeft: "1px solid rgba(34,197,94,0.22)",
+    boxShadow: "2px 0 0 rgba(15,23,42,0.20), inset 0 0 18px rgba(34,197,94,0.06)",
+  },
 
   clearXRowButton: {
-    minWidth: "82px",
+    minWidth: "74px",
     height: "28px",
     padding: "0 8px",
-    borderRadius: "9px",
-    border: "1px solid #bfdbfe",
-    background: "#eff6ff",
-    color: "#334155",
-    fontWeight: "650",
+    borderRadius: "999px",
+    border: "1px solid rgba(34,197,94,0.42)",
+    background: "linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%)",
+    color: "#065f46",
+    fontWeight: "950",
     fontSize: "11px",
     cursor: "pointer",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+    boxShadow: "0 0 12px rgba(34,197,94,0.16), inset 0 1px 0 rgba(255,255,255,0.85)",
     whiteSpace: "nowrap",
   },
 
@@ -3705,15 +3729,15 @@ const styles = {
 
   compactProToolbar: {
     width: "min(1840px, calc(100vw - 20px))",
-    margin: "0 auto 6px",
-    padding: "8px",
+    margin: "0 auto 8px",
+    padding: "9px",
     display: "flex",
     alignItems: "center",
     gap: "10px",
-    borderRadius: "18px",
-    background: "linear-gradient(135deg, rgba(8,22,40,0.90), rgba(15,23,42,0.68))",
-    border: "1px solid rgba(56,189,248,0.22)",
-    boxShadow: "0 14px 38px rgba(0,0,0,0.28), 0 0 22px rgba(34,211,238,0.08), inset 0 1px 0 rgba(255,255,255,0.07)",
+    borderRadius: "20px",
+    background: "linear-gradient(135deg, rgba(2,6,23,0.95), rgba(6,35,30,0.76), rgba(15,23,42,0.78))",
+    border: "1px solid rgba(34,197,94,0.28)",
+    boxShadow: "0 14px 42px rgba(0,0,0,0.34), 0 0 26px rgba(34,197,94,0.10), 0 0 22px rgba(34,211,238,0.08), inset 0 1px 0 rgba(255,255,255,0.08)",
     overflow: "visible",
   },
 
@@ -4081,7 +4105,8 @@ const styles = {
 
   page: {
     minHeight: "100vh",
-    background: "#020817",
+    background:
+      "radial-gradient(circle at 16% 8%, rgba(16,185,129,0.20), transparent 28%), radial-gradient(circle at 86% 10%, rgba(14,165,233,0.18), transparent 26%), linear-gradient(135deg, #020617 0%, #07111f 45%, #000814 100%)",
     color: "#e5e7eb",
     paddingTop: "88px",
     paddingBottom: "132px",
@@ -4090,10 +4115,10 @@ const styles = {
 
   title: {
     margin: 0,
-    fontSize: "32px",
-    letterSpacing: "4px",
+    fontSize: "34px",
+    letterSpacing: "4.5px",
     color: "#f8fafc",
-    textShadow: "0 0 20px rgba(56,189,248,0.25), 0 2px 0 #000",
+    textShadow: "0 0 18px rgba(34,197,94,0.28), 0 0 30px rgba(56,189,248,0.20), 0 2px 0 #000",
     lineHeight: 1.05,
     whiteSpace: "nowrap",
   },
@@ -4161,18 +4186,52 @@ const styles = {
   },
 
 
+  marketTickerBar: {
+    width: "min(920px, calc(100vw - 28px))",
+    height: "34px",
+    margin: "-8px auto 14px",
+    padding: "0 14px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "18px",
+    borderRadius: "999px",
+    background: "linear-gradient(90deg, rgba(2,6,23,0.88), rgba(6,78,59,0.42), rgba(2,6,23,0.88))",
+    border: "1px solid rgba(34,197,94,0.24)",
+    color: "#cbd5e1",
+    fontSize: "11px",
+    fontWeight: "950",
+    letterSpacing: "1px",
+    textTransform: "uppercase",
+    boxShadow: "0 12px 26px rgba(0,0,0,0.22), 0 0 18px rgba(34,197,94,0.10)",
+    overflow: "hidden",
+  },
+
+  marketTickerPositive: {
+    color: "#86efac",
+    textShadow: "0 0 12px rgba(34,197,94,0.42)",
+    whiteSpace: "nowrap",
+  },
+
+  marketTickerNegative: {
+    color: "#fca5a5",
+    textShadow: "0 0 12px rgba(239,68,68,0.35)",
+    whiteSpace: "nowrap",
+  },
+
   titleHero: {
     width: "fit-content",
-    maxWidth: "720px",
+    maxWidth: "760px",
     margin: "0 auto 18px",
-    padding: "14px 26px",
+    padding: "14px 28px",
     display: "flex",
     alignItems: "center",
     gap: "14px",
-    background: "linear-gradient(135deg, rgba(8,22,40,0.96), rgba(15,23,42,0.76))",
-    border: "1px solid rgba(56,189,248,0.28)",
-    borderRadius: "22px",
-    boxShadow: "0 18px 55px rgba(0,0,0,0.38), 0 0 34px rgba(14,165,233,0.12), inset 0 1px 0 rgba(255,255,255,0.10)",
+    background: "linear-gradient(135deg, rgba(2,6,23,0.98), rgba(6,35,30,0.84), rgba(8,22,40,0.92))",
+    border: "1px solid rgba(34,197,94,0.34)",
+    borderRadius: "24px",
+    boxShadow: "0 18px 55px rgba(0,0,0,0.42), 0 0 38px rgba(34,197,94,0.16), 0 0 22px rgba(14,165,233,0.12), inset 0 1px 0 rgba(255,255,255,0.12)",
+    animation: "tradingPulse 4.5s ease-in-out infinite",
   },
 
   titleIcon: {
@@ -4188,12 +4247,15 @@ const styles = {
   },
 
   titleSmall: {
-    color: "#67e8f9",
+    color: "#86efac",
     fontSize: "12px",
-    fontWeight: "900",
-    letterSpacing: "3px",
+    fontWeight: "950",
+    letterSpacing: "2.2px",
     textTransform: "uppercase",
-    marginBottom: "4px",
+    borderBottom: "1px solid rgba(34,197,94,0.34)",
+    paddingBottom: "4px",
+    marginBottom: "6px",
+    textShadow: "0 0 14px rgba(34,197,94,0.34)",
   },
 
   smartHelpBar: {
@@ -5538,14 +5600,16 @@ const styles = {
     position: "sticky",
     top: 0,
     zIndex: 50,
-    background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
-    color: "#ffffff",
-    fontWeight: "800",
+    background: "linear-gradient(180deg, #064e3b 0%, #082f49 54%, #020617 100%)",
+    color: "#ecfeff",
+    fontWeight: "950",
     fontSize: "12px",
-    padding: "6px",
-    borderRight: "1px solid rgba(15,23,42,0.22)",
+    padding: "7px 6px",
+    borderRight: "1px solid rgba(34,197,94,0.22)",
+    borderBottom: "1px solid rgba(34,197,94,0.30)",
     textAlign: "center",
     whiteSpace: "nowrap",
+    textShadow: "0 0 10px rgba(34,211,238,0.30)",
   },
 
   thSmall: {
@@ -5561,8 +5625,8 @@ const styles = {
     position: "sticky",
     top: 0,
     zIndex: 90,
-    background: "linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%)",
-    boxShadow: "2px 0 0 rgba(15,23,42,0.30)",
+    background: "linear-gradient(180deg, #065f46 0%, #0f172a 100%)",
+    boxShadow: "2px 0 0 rgba(34,197,94,0.28), 0 0 16px rgba(34,197,94,0.10)",
   },
 
   stickySubHeader: {
@@ -5575,10 +5639,10 @@ const styles = {
 
   stickyCell: {
     position: "sticky",
-    background: "#ffffff",
+    background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
     color: "#111827",
     zIndex: 70,
-    boxShadow: "2px 0 0 rgba(15,23,42,0.20)",
+    boxShadow: "2px 0 0 rgba(15,23,42,0.20), 7px 0 18px rgba(2,6,23,0.05)",
   },
 
   calendarTitle: {fontSize: "28px", fontWeight: "950", textTransform: "capitalize", textShadow: "0 2px 0 #000"},
@@ -5598,26 +5662,27 @@ const styles = {
   },
 
   blocRow: {
-    background: "linear-gradient(180deg, #dbeafe 0%, #bfdbfe 100%)",
-    color: "#0f172a",
-    fontWeight: "800",
+    background: "linear-gradient(90deg, #dcfce7 0%, #bae6fd 50%, #dcfce7 100%)",
+    color: "#052e16",
+    fontWeight: "950",
     fontSize: "13px",
     textAlign: "center",
-    letterSpacing: "0.2px",
-    borderTop: "1px solid #93c5fd",
-    borderBottom: "1px solid #93c5fd",
+    letterSpacing: "0.5px",
+    borderTop: "1px solid rgba(34,197,94,0.36)",
+    borderBottom: "1px solid rgba(14,165,233,0.36)",
+    textTransform: "uppercase",
   },
 
   td: {
-    borderRight: "1px solid rgba(15, 23, 42, 0.16)",
-    borderBottom: "1px solid rgba(15, 23, 42, 0.16)",
+    borderRight: "1px solid rgba(15, 23, 42, 0.14)",
+    borderBottom: "1px solid rgba(15, 23, 42, 0.14)",
     padding: "4px 6px",
     height: "28px",
     textAlign: "center",
     color: "#0f172a",
     fontSize: "12px",
-    fontWeight: "550",
-    background: "#ffffff",
+    fontWeight: "650",
+    background: "linear-gradient(180deg, #ffffff 0%, #f9fbff 100%)",
   },
 
   tdLeft: {
@@ -5694,88 +5759,20 @@ const styles = {
     color: "#111827",
   },
 
-  actionUltraGroup: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "8px",
-    width: "100%",
-    minWidth: "118px",
-    whiteSpace: "nowrap",
-  },
-
-  actionUltraStickyCell: {
-    background: "linear-gradient(180deg, #f8fbff 0%, #eef6ff 100%)",
-    zIndex: 230,
-    overflow: "visible",
-    textAlign: "center",
-    boxShadow: "2px 0 0 rgba(15,23,42,0.22), inset 0 1px 0 rgba(255,255,255,0.85)",
-  },
-
-  actionClearXButton: {
-    width: "42px",
-    minWidth: "42px",
-    height: "28px",
-    borderRadius: "9px",
-    border: "1px solid rgba(56,189,248,0.65)",
-    background: "linear-gradient(180deg, #ecfeff 0%, #dbeafe 100%)",
-    color: "#075985",
-    fontWeight: "900",
-    fontSize: "14px",
-    boxShadow: "0 0 12px rgba(56,189,248,0.22), inset 0 1px 0 rgba(255,255,255,0.90)",
-    transition: "transform 0.16s ease, filter 0.16s ease, opacity 0.16s ease",
-  },
-
-  actionDeleteButton: {
-    background: "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)",
-    color: "#ffffff",
-    border: "1px solid rgba(255,255,255,0.22)",
-    borderRadius: "9px",
-    width: "42px",
-    minWidth: "42px",
-    height: "28px",
-    cursor: "pointer",
-    fontSize: "14px",
-    fontWeight: "900",
-    lineHeight: "24px",
-    boxShadow: "0 0 14px rgba(239,68,68,0.34), inset 0 1px 0 rgba(255,255,255,0.25)",
-    opacity: 0.92,
-    transform: "scale(1)",
-    transition: "opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease",
-  },
-
-  rowActionButtons: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "6px",
-    width: "100%",
-    minWidth: "140px",
-    whiteSpace: "nowrap",
-  },
-
-  actionStickyCell: {
-    background: "#f8fbff",
-    zIndex: 160,
-    overflow: "visible",
-    boxShadow: "-2px 0 0 rgba(15,23,42,0.18), 2px 0 0 rgba(15,23,42,0.18)",
-  },
-
   deleteButton: {
-    background: "linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)",
+    background: "linear-gradient(180deg, #ef4444 0%, #7f1d1d 100%)",
     color: "#ffffff",
-    border: "1px solid rgba(255,255,255,0.22)",
-    borderRadius: "9px",
-    width: "34px",
-    minWidth: "34px",
+    border: "1px solid rgba(248,113,113,0.42)",
+    borderRadius: "999px",
+    width: "32px",
     height: "28px",
     cursor: "pointer",
-    fontSize: "15px",
-    fontWeight: "900",
+    fontSize: "14px",
+    fontWeight: "950",
     lineHeight: "24px",
     boxShadow: "0 0 14px rgba(239,68,68,0.30), inset 0 1px 0 rgba(255,255,255,0.25)",
     opacity: 0.82,
-    transform: "scale(1)",
+    transform: "scale(0.96)",
     transition: "opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease",
   },
 
