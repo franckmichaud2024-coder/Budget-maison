@@ -7860,7 +7860,7 @@ const styles = {
     minHeight: "72px",
     background: "#dbeafe",
     display: "grid",
-    gridTemplateColumns: "44% 14% 14% 14% 8%",
+    gridTemplateColumns: "52% 12% 12% 12% 12%",
     alignItems: "center",
     gap: "6px",
     padding: "10px 8px",
