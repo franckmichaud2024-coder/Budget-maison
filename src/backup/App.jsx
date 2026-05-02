@@ -377,6 +377,14 @@ export default function App() {
   const [noteEdition, setNoteEdition] = useState("");
   const [valeurs3177, setValeurs3177] = useState({});
   const [input3177Actif, setInput3177Actif] = useState(null);
+  const [revenusResume3185, setRevenusResume3185] = useState([]);
+  const [banque3185, setBanque3185] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("budget_3185_banque_v1") || "{}");
+    } catch {
+      return {};
+    }
+  });
 
   const [showCalendarPanel, setShowCalendarPanel] = useState(false);
   const [calendarDate, setCalendarDate] = useState(new Date());
@@ -693,6 +701,38 @@ export default function App() {
     return lignes;
   }
 
+  async function loadRevenusResume3185() {
+    const userId = getUserId();
+
+    if (!userId) {
+      setRevenusResume3185([]);
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from("budget_transactions")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("compte", "Entrée d’argent")
+      .order("date", { ascending: false });
+
+    if (error) {
+      console.error("Erreur revenus 3185:", error.message);
+      setRevenusResume3185([]);
+      return [];
+    }
+
+    const lignes = (data || []).map((item) => ({
+      ...item,
+      bloc: normaliserBloc(item.bloc || "ENTRÉE D'ARGENT"),
+      compte: item.compte || "Entrée d’argent",
+      mode: normaliserMode(item.mode),
+    }));
+
+    setRevenusResume3185(lignes);
+    return lignes;
+  }
+
   useEffect(() => {
     let mounted = true;
 
@@ -726,6 +766,7 @@ export default function App() {
 
     loadBlocs();
     loadData();
+    loadRevenusResume3185();
     setSnapshots(lireSnapshots());
   }, [compteActif, session?.user?.id]);
 
@@ -1723,6 +1764,117 @@ export default function App() {
     setEcheance(String(getWeekNumberISO(date)));
     setCalendarDate(date);
     setShowCalendarPanel(false);
+  }
+
+  function sauvegarderChampBanque3185(champ, valeur) {
+    const next = { ...banque3185, [champ]: valeur };
+    setBanque3185(next);
+    localStorage.setItem("budget_3185_banque_v1", JSON.stringify(next));
+  }
+
+  function lireMontantBanque3185(champ) {
+    return round2(Number(String(banque3185?.[champ] || 0).replace(",", ".")) || 0);
+  }
+
+  function renduChampBanque3185(champ, placeholder = "0.00") {
+    return (
+      <input
+        value={banque3185?.[champ] ?? ""}
+        onChange={(e) => {
+          const texte = e.target.value.replace(",", ".");
+          if (/^-?\d*\.?\d*$/.test(texte)) sauvegarderChampBanque3185(champ, texte);
+        }}
+        onBlur={(e) => sauvegarderChampBanque3185(champ, formatNombreInput(e.target.value))}
+        placeholder={placeholder}
+        style={styles.ultraBankInput}
+      />
+    );
+  }
+
+  function totauxListeTransactions(liste = []) {
+    return liste.reduce(
+      (acc, item) => {
+        const c = calculerMontants(item);
+        acc.semaine += c.semaine;
+        acc.mois += c.mois;
+        acc.annee += c.annee;
+        return acc;
+      },
+      { semaine: 0, mois: 0, annee: 0 }
+    );
+  }
+
+  function renduResumeUltra3185() {
+    const lignesDepenses = data.filter((item) => item.type !== "revenu");
+    const lignesRevenus = revenusResume3185.filter((item) => item.type === "revenu");
+    const dep = totauxListeTransactions(lignesDepenses);
+    const rev = totauxListeTransactions(lignesRevenus);
+    const banque = lireMontantBanque3185("banque");
+    const videotronMono = lireMontantBanque3185("videotronMono");
+    const mono = lireMontantBanque3185("mono");
+    const totalMono = round2(videotronMono + mono);
+    const soldeApres3185 = round2(rev.mois + banque - dep.mois);
+
+    return (
+      <div style={styles.ultraBankSummaryShell}>
+        <div style={styles.ultraBankSectionTitle}>SOUS-TOTAL DES DÉPENSES :</div>
+        <div style={styles.ultraBankMiniGrid}>
+          <div style={styles.ultraBankBlackLabel}>SOUS-TOTAL DES DÉPENSES :</div>
+          <div style={styles.ultraBankBlackHead}>SEMAINE</div>
+          <div style={styles.ultraBankBlackHead}>MOIS</div>
+          <div style={styles.ultraBankBlackHead}>ANNÉE</div>
+
+          <div style={styles.ultraBankBlackSpacer}></div>
+          <div style={styles.ultraBankWhiteValue}>{formatArgent(dep.semaine)}</div>
+          <div style={styles.ultraBankWhiteValue}>{formatArgent(dep.mois)}</div>
+          <div style={styles.ultraBankWhiteValue}>{formatArgent(dep.annee)}</div>
+        </div>
+
+        <div style={styles.ultraBankBenefTitle}>BÉNÉFICES :</div>
+        <div style={styles.ultraBankMiniGrid}>
+          <div style={styles.ultraBankBlackHeadLeft}>DESCRIPTION</div>
+          <div style={styles.ultraBankBlackHead}>SEMAINE</div>
+          <div style={styles.ultraBankBlackHead}>MOIS</div>
+          <div style={styles.ultraBankBlackHead}>ANNÉE</div>
+
+          <div style={styles.ultraBankTotalLabel}>TOTAL :</div>
+          <div style={styles.ultraBankWhiteValue}>{formatArgent(rev.semaine)}</div>
+          <div style={styles.ultraBankWhiteValue}>{formatArgent(rev.mois)}</div>
+          <div style={styles.ultraBankWhiteValue}>{formatArgent(rev.annee)}</div>
+        </div>
+
+        <div style={styles.ultraBankBottomZone}>
+          <div style={styles.ultraBankSoldeText}>
+            Solde en banque après avoir payé <span>Compte 3185</span>
+          </div>
+
+          <div style={styles.ultraBankBankLine}>
+            <strong>Banque :</strong>
+            {renduChampBanque3185("banque", "0.00")}
+          </div>
+
+          <div style={styles.ultraBankBankLine}>
+            <strong>Vidéotr. Mono :</strong>
+            {renduChampBanque3185("videotronMono", "0.00")}
+          </div>
+
+          <div style={styles.ultraBankBankLine}>
+            <strong>Mono :</strong>
+            {renduChampBanque3185("mono", "0.00")}
+          </div>
+
+          <div style={styles.ultraBankBankLine}>
+            <strong>Total Mono :</strong>
+            <span style={styles.ultraBankCalculated}>{formatArgent(totalMono)}</span>
+          </div>
+
+          <div style={styles.ultraBankResult}>
+            <span>Solde estimé après 3185</span>
+            <strong>{formatArgent(soldeApres3185)}</strong>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   function limiterPositionDock(position, largeurDock = 320, hauteurDock = 70) {
@@ -3352,6 +3504,7 @@ export default function App() {
         {erreur && <div style={styles.error}>Erreur : {erreur}</div>}
 <div key={compteActif} style={styles.pageSwitchAnimation}>
           {afficherTableauDetaille ? (
+          <>
           <div
             ref={tableScrollRef}
             className="glass-glow"
@@ -3744,8 +3897,12 @@ export default function App() {
               )}
             </tbody>
             </table>
+            <div style={styles.ultraBankInScroll}>
+              {renduResumeUltra3185()}
+            </div>
             <div style={styles.bottomSafeSpacer} />
           </div>
+          </>
           ) : (
             <div style={styles.blankAccountPage}>
               <div style={styles.blankAccountCard}>
@@ -6055,7 +6212,7 @@ const styles = {
 
   countBadge: {
     marginLeft: "8px",
-    background: "#000",
+    background: "linear-gradient(180deg, #020617 0%, #000000 100%)",
     color: "#fff",
     borderRadius: "10px",
     padding: "2px 6px",
@@ -8110,6 +8267,190 @@ const styles = {
     fontWeight: "950",
     textAlign: "center",
     whiteSpace: "nowrap",
+  },
+
+
+  ultraBankInScroll: {
+    position: "sticky",
+    left: "0",
+    width: "min(1120px, calc(100vw - 44px))",
+    margin: "24px auto 0 auto",
+    padding: "18px 18px 28px 18px",
+    background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+    border: "1px solid rgba(148,163,184,0.45)",
+    borderRadius: "18px",
+    boxShadow: "0 18px 45px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.9)",
+    zIndex: 5,
+  },
+
+  ultraBankSummaryShell: {
+    width: "100%",
+    margin: "0 auto",
+    padding: "0",
+    color: "#020617",
+    fontFamily: "Arial, Helvetica, sans-serif",
+    background: "transparent",
+  },
+
+  ultraBankMiniGrid: {
+    display: "grid",
+    gridTemplateColumns: "minmax(280px, 1fr) 92px 92px 92px",
+    alignItems: "stretch",
+    border: "1px solid #020617",
+    borderBottom: "0",
+    background: "#fff",
+    overflow: "hidden",
+    boxShadow: "0 10px 22px rgba(15,23,42,0.08)",
+  },
+
+  ultraBankBlackLabel: {
+    background: "linear-gradient(180deg, #020617 0%, #000000 100%)",
+    color: "#fff",
+    fontWeight: "950",
+    fontSize: "13px",
+    padding: "8px 10px",
+    borderRight: "1px solid #000",
+  },
+
+  ultraBankBlackSpacer: {
+    background: "#000",
+    borderTop: "1px solid #000",
+    borderRight: "1px solid #000",
+  },
+
+  ultraBankBlackHead: {
+    background: "linear-gradient(180deg, #020617 0%, #000000 100%)",
+    color: "#fff",
+    fontWeight: "950",
+    fontSize: "12px",
+    textAlign: "center",
+    padding: "8px 6px",
+    borderLeft: "1px solid #000",
+  },
+
+  ultraBankBlackHeadLeft: {
+    background: "linear-gradient(180deg, #020617 0%, #000000 100%)",
+    color: "#fff",
+    fontWeight: "950",
+    fontSize: "12px",
+    padding: "8px 10px",
+  },
+
+  ultraBankWhiteValue: {
+    background: "#fff",
+    color: "#000",
+    fontWeight: "850",
+    fontSize: "12px",
+    textAlign: "right",
+    padding: "7px 8px",
+    borderLeft: "1px solid #000",
+    borderBottom: "1px solid #000",
+    whiteSpace: "nowrap",
+  },
+
+  ultraBankSectionTitle: {
+    background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 48%, #60a5fa 100%)",
+    border: "1px solid rgba(15,23,42,0.9)",
+    borderBottom: "0",
+    textAlign: "center",
+    fontWeight: "950",
+    fontSize: "17px",
+    padding: "9px 8px",
+    color: "#ffffff",
+    letterSpacing: "0.7px",
+    textTransform: "uppercase",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.32), 0 10px 22px rgba(37,99,235,0.18)",
+  },
+
+  ultraBankBenefTitle: {
+    marginTop: "20px",
+    background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 48%, #60a5fa 100%)",
+    border: "1px solid rgba(15,23,42,0.9)",
+    borderBottom: "0",
+    textAlign: "center",
+    fontWeight: "950",
+    fontSize: "18px",
+    padding: "9px 8px",
+    color: "#ffffff",
+    letterSpacing: "0.7px",
+    textTransform: "uppercase",
+  },
+
+  ultraBankTotalLabel: {
+    background: "#fff",
+    color: "#000",
+    fontWeight: "950",
+    fontSize: "12px",
+    padding: "7px 10px",
+    borderBottom: "1px solid #000",
+  },
+
+  ultraBankBottomZone: {
+    width: "min(640px, 100%)",
+    margin: "24px auto 0 auto",
+    display: "grid",
+    gridTemplateColumns: "1fr",
+    gap: "9px",
+    fontSize: "12px",
+    fontWeight: "850",
+    padding: "18px 20px",
+    background: "linear-gradient(180deg, rgba(248,250,252,0.95) 0%, rgba(241,245,249,0.95) 100%)",
+    border: "1px solid rgba(148,163,184,0.55)",
+    borderRadius: "16px",
+    boxShadow: "0 16px 34px rgba(15,23,42,0.10), inset 0 1px 0 rgba(255,255,255,0.9)",
+  },
+
+  ultraBankSoldeText: {
+    textAlign: "center",
+    fontWeight: "950",
+    color: "#000",
+  },
+
+  ultraBankBankLine: {
+    display: "grid",
+    gridTemplateColumns: "1fr 140px",
+    alignItems: "center",
+    gap: "10px",
+    color: "#000",
+  },
+
+  ultraBankInput: {
+    width: "140px",
+    height: "28px",
+    background: "linear-gradient(180deg, #f8fafc 0%, #e5e7eb 100%)",
+    border: "1px solid #cbd5e1",
+    borderRadius: "8px",
+    color: "#020617",
+    textAlign: "right",
+    fontWeight: "950",
+    padding: "0 10px",
+    boxSizing: "border-box",
+    boxShadow: "inset 0 1px 2px rgba(15,23,42,0.10), 0 3px 10px rgba(15,23,42,0.08)",
+    outline: "none",
+  },
+
+  ultraBankCalculated: {
+    color: "#020617",
+    textAlign: "right",
+    fontWeight: "950",
+    padding: "6px 10px",
+    background: "linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)",
+    border: "1px solid #cbd5e1",
+    borderRadius: "8px",
+    boxShadow: "inset 0 1px 2px rgba(15,23,42,0.08)",
+  },
+
+  ultraBankResult: {
+    marginTop: "12px",
+    background: "linear-gradient(135deg, #020617 0%, #0f172a 55%, #1e3a8a 100%)",
+    color: "#fff",
+    borderRadius: "10px",
+    padding: "10px 12px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    boxShadow: "0 8px 22px rgba(2,6,23,0.22)",
   },
 
 };
