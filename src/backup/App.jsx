@@ -7,11 +7,21 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  // 🔴 FORCE LOGOUT À CHAQUE RELOAD
+  // 🔒 Sécurité : logout seulement au premier chargement
   useEffect(() => {
-    supabase.auth.signOut();
+    const clearSessionOnLoad = async () => {
+      const hasVisited = sessionStorage.getItem("visited");
+
+      if (!hasVisited) {
+        await supabase.auth.signOut();
+        sessionStorage.setItem("visited", "true");
+      }
+    };
+
+    clearSessionOnLoad();
   }, []);
 
+  // 🔄 Gestion session
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
@@ -44,7 +54,21 @@ export default function App() {
   const logout = async () => {
     await supabase.auth.signOut();
     setSession(null);
+    sessionStorage.removeItem("visited"); // reset sécurité
   };
+
+  // 🔴 Déconnexion à la fermeture de page (ultra sécurité)
+  useEffect(() => {
+    const handleClose = () => {
+      supabase.auth.signOut();
+    };
+
+    window.addEventListener("beforeunload", handleClose);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleClose);
+    };
+  }, []);
 
   if (!session) {
     return (
@@ -60,7 +84,7 @@ export default function App() {
           background: "#0b1e3a",
           padding: 30,
           borderRadius: 12,
-          width: 300
+          width: 320
         }}>
           <h2>Connexion sécurisée</h2>
 
@@ -94,9 +118,18 @@ export default function App() {
   }
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Dashboard Budget Maison</h1>
-      <button onClick={logout}>Se déconnecter</button>
+    <div style={{ padding: 40, color: "white", background: "#020b1a", minHeight: "100vh" }}>
+      <h1>🔥 Dashboard Budget Maison</h1>
+      <p>Connecté : {session.user.email}</p>
+
+      <button onClick={logout} style={{ marginTop: 20 }}>
+        Se déconnecter
+      </button>
+
+      <div style={{ marginTop: 40 }}>
+        <h2>📊 Dashboard actif</h2>
+        <p>Ton système est maintenant sécurisé et fonctionnel.</p>
+      </div>
     </div>
   );
 }
