@@ -4,12 +4,29 @@ import { supabase } from "./supabase";
 const semaines = Array.from({ length: 52 }, (_, i) => i + 1);
 
 const COMPTES_BUDGET = [
-  "7570 - Procédures",
+  "Entrée d’argent",
   "3185 - Enveloppes",
   "3177 - Argent accumulé",
-  "Entrée d’argent",
+  "7570 - Procédures",
 ];
 
+
+
+function ordonnerComptesBudget(liste = []) {
+  const ordreFixe = COMPTES_BUDGET;
+  const uniques = Array.from(new Set([...(liste || []), ...ordreFixe]));
+
+  return uniques.sort((a, b) => {
+    const ia = ordreFixe.indexOf(a);
+    const ib = ordreFixe.indexOf(b);
+
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+
+    return String(a).localeCompare(String(b), "fr", { sensitivity: "base" });
+  });
+}
 
 const SNAPSHOT_KEY = "budget_maison_snapshots_v1";
 const RESET_PASSWORD = "1234"; // Change ce mot de passe ici
@@ -315,7 +332,7 @@ export default function App() {
 
   const [blocs] = useState(BLOCS_FIXES);
   const [blocActif, setBlocActif] = useState(BLOCS_FIXES[0]);
-  const [comptesBudget, setComptesBudget] = useState(COMPTES_BUDGET);
+  const [comptesBudget, setComptesBudget] = useState(() => ordonnerComptesBudget(COMPTES_BUDGET));
   const [compteActif, setCompteActif] = useState(COMPTES_BUDGET[0]);
   const [nouveauCompte, setNouveauCompte] = useState("");
   const [dragCompte, setDragCompte] = useState(null);
@@ -385,6 +402,28 @@ export default function App() {
 
 
 
+
+  function styleOngletBas(compte) {
+    const actif = compteActif === compte;
+
+    return {
+      minWidth: "150px",
+      height: "42px",
+      padding: "0 16px",
+      borderRadius: "12px 12px 0 0",
+      border: "1px solid rgba(15,23,42,0.25)",
+      borderBottom: actif ? "3px solid #22c55e" : "2px solid #020617",
+      borderTop: actif ? "4px solid #94a3b8" : "4px solid #64748b",
+      background: actif ? "#f8fafc" : "#dbeafe",
+      color: actif ? "#0f766e" : "#020617",
+      fontWeight: "950",
+      cursor: "pointer",
+      boxShadow: actif
+        ? "0 -3px 12px rgba(34,197,94,0.18), inset 0 1px 0 rgba(255,255,255,0.9)"
+        : "inset 0 1px 0 rgba(255,255,255,0.75)",
+    };
+  }
+
   function changerCompteActif(compte) {
     setCompteActif(compte);
     setDescription("");
@@ -441,7 +480,7 @@ export default function App() {
 
     const ancienCompte = compteActif;
 
-    const nouvelleListe = comptesBudget.map((compte) =>
+    const nouvelleListe = ordonnerComptesBudget(comptesBudget).map((compte) =>
       compte === ancienCompte ? nomFinal : compte
     );
 
@@ -502,23 +541,7 @@ export default function App() {
   }
 
   function couleurCompte(compte) {
-    const couleurs = [
-      "#22c55e",
-      "#0ea5e9",
-      "#f59e0b",
-      "#a855f7",
-      "#ef4444",
-      "#14b8a6",
-      "#84cc16",
-      "#ec4899",
-    ];
-
-    let total = 0;
-    for (let i = 0; i < compte.length; i += 1) {
-      total += compte.charCodeAt(i);
-    }
-
-    return couleurs[total % couleurs.length];
+    return "#64748b";
   }
 
   function numeroCompte(compte) {
@@ -603,7 +626,7 @@ export default function App() {
 
     const ancienneValeur = compteEdition;
 
-    const prochaineListe = comptesBudget.map((c) =>
+    const prochaineListe = ordonnerComptesBudget(comptesBudget).map((c) =>
       c === ancienneValeur ? nouveauNom : c
     );
 
@@ -690,20 +713,6 @@ export default function App() {
     });
 
     return () => {
-
-      <style>{`
-        th {
-          padding-top: 2px !important;
-          padding-bottom: 2px !important;
-          line-height: 1 !important;
-        }
-        thead tr {
-          height: 24px !important;
-        }
-        .compact-header th {
-          height: 24px !important;
-        }
-      `}</style>
       mounted = false;
       listener.subscription.unsubscribe();
     };
@@ -2701,7 +2710,7 @@ export default function App() {
           style={styles.accountSelectClean}
           title="Changer de page comme un onglet Excel"
         >
-          {comptesBudget.map((compte) => (
+          {ordonnerComptesBudget(comptesBudget).map((compte) => (
             <option key={compte} value={compte}>
               {compte}
             </option>
@@ -3769,7 +3778,7 @@ export default function App() {
         )}
 
         <div style={styles.excelTabsBar}>
-          {comptesBudget.map((compte) => {
+          {ordonnerComptesBudget(comptesBudget).map((compte) => {
             const couleur = couleurCompte(compte);
             const actif = compteActif === compte;
 
@@ -4166,54 +4175,41 @@ const styles = {
   },
 
   transferButton: {
-    width: "66px",
-    minWidth: "66px",
+    minWidth: "58px",
     height: "28px",
     borderRadius: "9px",
     border: "1px solid #93c5fd",
     background: "#eaf3ff",
     color: "#0f172a",
-    fontWeight: "950",
+    fontWeight: "850",
     fontSize: "16px",
     cursor: "pointer",
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
   },
 
   transferColumnCell: {
-    width: "110px",
-    minWidth: "110px",
-    maxWidth: "110px",
-    boxSizing: "border-box",
-    padding: "0 12px",
+    width: "82px",
+    minWidth: "82px",
     textAlign: "center",
     verticalAlign: "middle",
     background: "#f8fafc",
     borderRight: "1px solid rgba(15,23,42,0.16)",
-    borderLeft: "1px solid rgba(15,23,42,0.16)",
     borderBottom: "1px solid rgba(15,23,42,0.16)",
-    overflow: "visible",
   },
 
   transferHeader: {
     position: "sticky",
     top: 0,
     zIndex: 50,
-    background: "linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%)",
+    background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
     color: "#ffffff",
-    fontWeight: "900",
-    fontSize: "11px",
-    padding: "2px 8px",
-    height: "24px",
-    lineHeight: "1",
+    fontWeight: "800",
+    fontSize: "12px",
+    padding: "6px",
     borderRight: "1px solid rgba(15,23,42,0.22)",
-    borderLeft: "1px solid rgba(15,23,42,0.22)",
     textAlign: "center",
     whiteSpace: "nowrap",
-    width: "110px",
-    minWidth: "110px",
-    maxWidth: "110px",
-    boxSizing: "border-box",
-    overflow: "visible",
+    minWidth: "82px",
   },
 
   amountPaleBadge: {
@@ -4870,7 +4866,7 @@ const styles = {
 
   title: {
     margin: 0,
-    fontSize: "24px",
+    fontSize: "32px",
     letterSpacing: "4px",
     color: "#f8fafc",
     textShadow: "0 0 20px rgba(56,189,248,0.25), 0 2px 0 #000",
@@ -5135,7 +5131,7 @@ const styles = {
   },
 
   weekCalendarButton: {
-    height: "28px",
+    height: "44px",
     minWidth: "86px",
     padding: "5px 12px",
     borderRadius: "14px",
@@ -5156,7 +5152,7 @@ const styles = {
   weekCalendarNumber: {fontSize: "20px", lineHeight: 1.1},
 
   dateMiniBox: {
-    height: "28px",
+    height: "44px",
     padding: "6px 12px",
     borderRadius: "14px",
     border: "1px solid rgba(56,189,248,0.22)",
@@ -5304,7 +5300,7 @@ const styles = {
   modalInput: {
     position: "relative",
     width: "100%",
-    height: "28px",
+    height: "44px",
     borderRadius: "11px",
     border: "1px solid rgba(250, 204, 21, 0.28)",
     background: "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(8,22,40,0.96))",
@@ -6328,18 +6324,17 @@ const styles = {
   },
 
   th: {
-    background: "linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%)",
+    position: "sticky",
+    top: 0,
+    zIndex: 50,
+    background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
     color: "#ffffff",
-    fontWeight: "900",
-    fontSize: "11px",
-    padding: "2px 6px",
-    height: "24px",
-    lineHeight: "1",
-    whiteSpace: "nowrap",
+    fontWeight: "800",
+    fontSize: "12px",
+    padding: "6px",
+    borderRight: "1px solid rgba(15,23,42,0.22)",
     textAlign: "center",
-    borderRight: "1px solid rgba(255,255,255,0.16)",
-    borderBottom: "1px solid rgba(15,23,42,0.35)",
-    boxSizing: "border-box",
+    whiteSpace: "nowrap",
   },
 
   thSmall: {
@@ -6354,19 +6349,9 @@ const styles = {
   stickyHeader: {
     position: "sticky",
     top: 0,
-    zIndex: 40,
+    zIndex: 90,
     background: "linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%)",
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: "11px",
-    padding: "2px 6px",
-    height: "24px",
-    lineHeight: "1",
-    whiteSpace: "nowrap",
-    textAlign: "center",
-    borderRight: "1px solid rgba(255,255,255,0.16)",
-    borderBottom: "1px solid rgba(15,23,42,0.35)",
-    boxSizing: "border-box",
+    boxShadow: "2px 0 0 rgba(15,23,42,0.30)",
   },
 
   stickySubHeader: {
@@ -6853,7 +6838,7 @@ const styles = {
     background: "linear-gradient(145deg, rgba(15,23,42,0.96), rgba(8,47,73,0.72))",
     border: "1px solid rgba(125,211,252,0.38)",
     color: "#ffffff",
-    fontSize: "24px",
+    fontSize: "30px",
     fontWeight: "950",
     letterSpacing: "2px",
     textTransform: "uppercase",
@@ -7949,7 +7934,7 @@ const styles = {
     gridTemplateColumns: "44% 14% 14% 14% 8%",
     alignItems: "center",
     gap: "6px",
-    padding: "2px 6px",
+    padding: "10px 8px",
     borderTop: "1px solid #93c5fd",
     boxSizing: "border-box",
   },
@@ -8010,7 +7995,7 @@ const styles = {
     display: "grid",
     gridTemplateColumns: "44% 14% 14% 14% 8%",
     alignItems: "center",
-    padding: "2px 6px",
+    padding: "10px 8px",
     borderTop: "1px solid #93c5fd",
     boxSizing: "border-box",
   },
@@ -8069,7 +8054,7 @@ const styles = {
 
   entreeUltraFooterTd: {
     height: "72px",
-    padding: "2px 6px",
+    padding: "10px 8px",
     textAlign: "center",
     verticalAlign: "middle",
     boxSizing: "border-box",
@@ -8105,25 +8090,6 @@ const styles = {
     fontWeight: "950",
     textAlign: "center",
     whiteSpace: "nowrap",
-  },
-
-  proMaxHeaderCompact: {
-    background: "linear-gradient(180deg, #2563eb 0%, #1d4ed8 100%)",
-    color: "#ffffff",
-    fontWeight: "900",
-    fontSize: "11px",
-    padding: "2px 6px",
-    height: "24px",
-    lineHeight: "1",
-    whiteSpace: "nowrap",
-    textAlign: "center",
-    borderRight: "1px solid rgba(255,255,255,0.16)",
-    borderBottom: "1px solid rgba(15,23,42,0.35)",
-    boxSizing: "border-box",
-  },
-
-  proMaxHeaderRowCompact: {
-    height: "24px",
   },
 
 };
