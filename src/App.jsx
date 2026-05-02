@@ -5932,7 +5932,7 @@ const styles = {
   emptyLine: {
     background: "#ffffff",
     borderBottom: "1px solid #000",
-  },,
+  },
 
   passwordChangeButton: {
     height: "28px",
