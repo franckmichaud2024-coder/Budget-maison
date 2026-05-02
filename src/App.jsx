@@ -6765,7 +6765,6 @@ const styles = {
     color: "#020617",
     fontFamily: "Arial, sans-serif",
   },
-,
 
   incomeMirrorShell: {
     width: "100%",
