@@ -178,7 +178,7 @@ const colonnesFixes = [
   { key: "echeance", width: 90 },
   { key: "x", width: 45 },
   { key: "accumule", width: 105 },
-  { key: "action", width: 95 },
+  { key: "action", width: 155 },
 ];
 
 function leftOffset(index) {
@@ -2725,22 +2725,10 @@ export default function App() {
                                     <div style={styles.descriptionRowTools}>
                                       <button
                                         onClick={() => commencerEditionInfo(item)}
-                                        style={styles.descriptionEditButton}
+                                        style={{ ...styles.descriptionEditButton, width: "100%" }}
                                         title="Cliquer pour modifier la catégorie / note"
                                       >
                                         {item.description || "-"}
-                                      </button>
-
-                                      <button
-                                        onClick={() => viderXLigne(item)}
-                                        style={{
-                                          ...styles.clearXRowButton,
-                                          opacity: nbX > 0 ? 1 : 0.45,
-                                        }}
-                                        title={nbX > 0 ? `Supprimer les ${nbX} X de cette ligne` : "Aucun X sur cette ligne"}
-                                        type="button"
-                                      >
-                                        🧹 X
                                       </button>
                                     </div>
                                   ),
@@ -2897,13 +2885,29 @@ export default function App() {
                                 {celluleFixe(nbX, 6, { verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(formatArgent(acc), 7, { ...styles.accumuleCell, verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(
-                                  <button
-                                    className="delete-row-button"
-                                    onClick={() => supprimerLigne(item)}
-                                    style={styles.deleteButton} title="Supprimer cette ligne"
-                                   title="Supprimer la ligne">
-                                    🗑️
-                                  </button>,
+                                  <div style={{ ...styles.actionGroup, justifyContent: "center" }}>
+                                    <button
+                                      onClick={() => viderXLigne(item)}
+                                      style={{
+                                        ...styles.clearXRowButton,
+                                        opacity: nbX > 0 ? 1 : 0.45,
+                                      }}
+                                      title={nbX > 0 ? `Supprimer les ${nbX} X de cette ligne` : "Aucun X sur cette ligne"}
+                                      type="button"
+                                    >
+                                      🧹 X
+                                    </button>
+
+                                    <button
+                                      className="delete-row-button"
+                                      onClick={() => supprimerLigne(item)}
+                                      style={{ ...styles.deleteButton, opacity: 1, transform: "scale(1)" }}
+                                      title="Supprimer la ligne"
+                                      type="button"
+                                    >
+                                      🗑️
+                                    </button>
+                                  </div>,
                                   8,
                                   { verticalAlign: "middle" },
                                   { rowSpan: 2 }
