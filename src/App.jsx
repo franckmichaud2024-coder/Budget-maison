@@ -8344,14 +8344,16 @@ const styles = {
 
   ultraBankBenefTitle: {
     marginTop: "20px",
-    background: "#c6e0b4",
+    background: "#2b5bd7",
     border: "2px solid #000",
     borderBottom: "0",
     textAlign: "center",
     fontWeight: "950",
     fontSize: "18px",
     padding: "6px",
-    color: "#000",
+    color: "#ffffff",
+    letterSpacing: "0.3px",
+    textTransform: "uppercase",
   },
 
   ultraBankTotalLabel: {
