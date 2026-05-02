@@ -178,7 +178,7 @@ const colonnesFixes = [
   { key: "echeance", width: 90 },
   { key: "x", width: 45 },
   { key: "accumule", width: 105 },
-  { key: "action", width: 155 },
+  { key: "action", width: 150 },
 ];
 
 function leftOffset(index) {
@@ -280,7 +280,7 @@ export default function App() {
   const [blocs] = useState(BLOCS_FIXES);
   const [blocActif, setBlocActif] = useState(BLOCS_FIXES[0]);
   const [comptesBudget, setComptesBudget] = useState(COMPTES_BUDGET);
-  const [compteActif, setCompteActif] = useState(COMPTES_BUDGET[1]);
+  const [compteActif, setCompteActif] = useState(COMPTES_BUDGET[0]);
   const [nouveauCompte, setNouveauCompte] = useState("");
   const [dragCompte, setDragCompte] = useState(null);
   const [compteEdition, setCompteEdition] = useState(null);
@@ -620,21 +620,6 @@ export default function App() {
     let mounted = true;
 
     async function verifierSession() {
-      // Sécurité: à chaque nouvelle ouverture d'onglet/fenêtre, on force une reconnexion.
-      // Après un login réussi dans le même onglet, on ne déconnecte plus en boucle.
-      const dejaVerifie = sessionStorage.getItem("budget_auth_checked");
-
-      if (!dejaVerifie) {
-        sessionStorage.setItem("budget_auth_checked", "true");
-        await supabase.auth.signOut();
-
-        if (mounted) {
-          setSession(null);
-          setAuthLoading(false);
-        }
-        return;
-      }
-
       const { data } = await supabase.auth.getSession();
 
       if (mounted) {
@@ -966,15 +951,14 @@ export default function App() {
     setAuthLoading(true);
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: loginEmail.trim().toLowerCase(),
+      email: loginEmail.trim(),
       password: loginPassword,
     });
 
     setAuthLoading(false);
 
     if (error) {
-      setLoginError(error.message || "Courriel ou mot de passe incorrect.");
-      console.error(error);
+      setLoginError("Courriel ou mot de passe incorrect.");
       return;
     }
 
@@ -2722,18 +2706,6 @@ export default function App() {
                                       >
                                         {item.description || "-"}
                                       </button>
-
-                                      <button
-                                        onClick={() => viderXLigne(item)}
-                                        style={{
-                                          ...styles.clearXRowButton,
-                                          opacity: nbX > 0 ? 1 : 0.45,
-                                        }}
-                                        title={nbX > 0 ? `Supprimer les ${nbX} X de cette ligne` : "Aucun X sur cette ligne"}
-                                        type="button"
-                                      >
-                                        🧹 X
-                                      </button>
                                     </div>
                                   ),
                                   0,
@@ -2889,13 +2861,30 @@ export default function App() {
                                 {celluleFixe(nbX, 6, { verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(formatArgent(acc), 7, { ...styles.accumuleCell, verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(
-                                  <button
-                                    className="delete-row-button"
-                                    onClick={() => supprimerLigne(item)}
-                                    style={styles.deleteButton} title="Supprimer cette ligne"
-                                   title="Supprimer la ligne">
-                                    🗑️
-                                  </button>,
+                                  <div style={styles.actionButtonGroup}>
+                                    <button
+                                      className="delete-row-button"
+                                      onClick={() => viderXLigne(item)}
+                                      style={{
+                                        ...styles.clearXRowButton,
+                                        opacity: nbX > 0 ? 1 : 0.45,
+                                      }}
+                                      title={nbX > 0 ? `Supprimer les ${nbX} X de cette ligne` : "Aucun X sur cette ligne"}
+                                      type="button"
+                                    >
+                                      🧹 X
+                                    </button>
+
+                                    <button
+                                      className="delete-row-button"
+                                      onClick={() => supprimerLigne(item)}
+                                      style={styles.deleteButton}
+                                      title="Supprimer la ligne"
+                                      type="button"
+                                    >
+                                      🗑️
+                                    </button>
+                                  </div>,
                                   8,
                                   { verticalAlign: "middle" },
                                   { rowSpan: 2 }
@@ -3525,6 +3514,14 @@ const styles = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     textAlign: "left",
+  },
+
+  actionButtonGroup: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    width: "100%",
   },
 
   clearXRowButton: {
