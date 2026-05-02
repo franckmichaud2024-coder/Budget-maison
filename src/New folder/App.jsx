@@ -1919,7 +1919,6 @@ export default function App() {
 
   function renduTableauEntreeArgent() {
     const revenusLignes = data.filter((item) => item.type === "revenu");
-
     const lignesAffichage = revenusLignes;
 
     const separerDescriptionRevenu = (description = "") => {
@@ -1937,10 +1936,8 @@ export default function App() {
     };
 
     const calculRevenu = (item) => {
-      if (item.__vide) return { semaine: 0, mois: 0, annee: 0 };
-
-      const montant = Number(item.montant || 0);
-      const mode = normaliserMode(item.mode || "semaine");
+      const montant = Number(item?.montant || 0);
+      const mode = normaliserMode(item?.mode || "semaine");
 
       if (mode === "mois") {
         return {
@@ -1969,17 +1966,13 @@ export default function App() {
     const totalMois = lignesAffichage.reduce((acc, item) => acc + calculRevenu(item).mois, 0);
     const totalAnnee = lignesAffichage.reduce((acc, item) => acc + calculRevenu(item).annee, 0);
 
-    async function modifierRevenu(item, champs) {
-      if (item.__vide || !item.id) return;
-
-      setData((prev) =>
-        prev.map((ligne) => (ligne.id === item.id ? { ...ligne, ...champs } : ligne))
-      );
+    async function sauvegarderRevenu(id, champs) {
+      if (!id) return;
 
       const { error } = await supabase
         .from("budget_transactions")
         .update(champs)
-        .eq("id", item.id)
+        .eq("id", id)
         .eq("user_id", getUserId());
 
       if (error) {
@@ -1988,21 +1981,35 @@ export default function App() {
       }
     }
 
-    async function modifierDepuis(source, item, valeur) {
+    function modifierRevenuLocal(item, champs, sauvegarder = true) {
+      if (!item?.id) return;
+
+      setData((prev) =>
+        prev.map((ligne) => (ligne.id === item.id ? { ...ligne, ...champs } : ligne))
+      );
+
+      if (sauvegarder) {
+        sauvegarderRevenu(item.id, champs);
+      }
+    }
+
+    function modifierDepuis(source, item, valeur) {
+      if (!item?.id) return;
+
       const v = Number(String(valeur).replace(",", "."));
       if (Number.isNaN(v)) return;
 
       if (source === "mois") {
-        await modifierRevenu(item, { montant: v, mode: "mois" });
+        modifierRevenuLocal(item, { montant: v, mode: "mois" });
         return;
       }
 
       if (source === "annee") {
-        await modifierRevenu(item, { montant: v, mode: "annee" });
+        modifierRevenuLocal(item, { montant: v, mode: "annee" });
         return;
       }
 
-      await modifierRevenu(item, { montant: v, mode: "semaine" });
+      modifierRevenuLocal(item, { montant: v, mode: "semaine" });
     }
 
     function demarrerEditionRevenu(item) {
@@ -2012,14 +2019,14 @@ export default function App() {
       setEditRevenuPrecision(parts.precision);
     }
 
-    async function confirmerEditionRevenu(item) {
+    function confirmerEditionRevenu(item) {
       const nouvelleDescription = composerDescriptionRevenu(editRevenuDescription, editRevenuPrecision);
       if (!nouvelleDescription.trim()) {
         setErreur("La description ne peut pas être vide.");
         return;
       }
 
-      await modifierRevenu(item, { description: nouvelleDescription });
+      modifierRevenuLocal(item, { description: nouvelleDescription });
       setEditRevenuId(null);
       setEditRevenuDescription("");
       setEditRevenuPrecision("");
@@ -2032,7 +2039,7 @@ export default function App() {
     }
 
     async function supprimerRevenu(item) {
-      if (item.__vide || !item.id) return;
+      if (!item?.id) return;
 
       const ok = window.confirm(`Supprimer l'entrée "${item.description}" ?`);
       if (!ok) return;
@@ -2053,12 +2060,12 @@ export default function App() {
 
     return (
       <div key={compteActif} style={styles.pageSwitchAnimation}>
-        <div style={styles.entreeCleanShell}>
-          <div style={styles.entreeCleanToolbar}>
+        <div style={styles.entreeUltraShell}>
+          <div style={styles.entreeUltraToolbar}>
             <select
               value={revenuDescription}
               onChange={(e) => setRevenuDescription(e.target.value)}
-              style={styles.entreeCleanSelect}
+              style={styles.entreeUltraSelect}
             >
               <option value="">Choisir une entrée d’argent</option>
               {DESCRIPTIONS_REVENUS.map((item) => (
@@ -2073,7 +2080,7 @@ export default function App() {
                 value={revenuDescriptionAutre}
                 onChange={(e) => setRevenuDescriptionAutre(e.target.value)}
                 placeholder="Nouvelle description"
-                style={styles.entreeCleanTextInput}
+                style={styles.entreeUltraTextInput}
               />
             )}
 
@@ -2081,7 +2088,7 @@ export default function App() {
               value={revenuPrecision}
               onChange={(e) => setRevenuPrecision(e.target.value)}
               placeholder="Précision ex: nom, enfant..."
-              style={styles.entreeCleanTextInput}
+              style={styles.entreeUltraTextInput}
             />
 
             <input
@@ -2090,13 +2097,13 @@ export default function App() {
               placeholder="Montant"
               type="number"
               step="0.01"
-              style={styles.entreeCleanAmountInput}
+              style={styles.entreeUltraAmountInput}
             />
 
             <select
               value={revenuMode}
               onChange={(e) => setRevenuMode(e.target.value)}
-              style={styles.entreeCleanModeSelect}
+              style={styles.entreeUltraModeSelect}
             >
               <option value="semaine">Semaine</option>
               <option value="mois">Mois</option>
@@ -2105,7 +2112,7 @@ export default function App() {
 
             <button
               onClick={ajouterRevenu}
-              style={styles.entreeCleanAddButton}
+              style={styles.entreeUltraAddButton}
               type="button"
               disabled={loading}
             >
@@ -2113,25 +2120,25 @@ export default function App() {
             </button>
           </div>
 
-          <div style={styles.entreeCleanPanel}>
-            <div style={styles.entreeCleanHeader}>
+          <div style={styles.entreeUltraPanel}>
+            <div style={styles.entreeUltraHeader}>
               <div style={styles.standardMirrorKicker}>Compte miroir automatique</div>
               <div style={styles.standardMirrorTitle}>Entrée d’argent</div>
             </div>
 
-            <div style={styles.entreeCleanNote}>
-              Même logique que le compte 3185 : clique sur ✏️ pour modifier la description et la précision, puis ✓ pour confirmer.
+            <div style={styles.entreeUltraNote}>
+              ULTRA PRO MAX : modifie Semaine, Mois ou Année. Les autres colonnes se recalculent automatiquement et la ligne se sauvegarde.
             </div>
 
-            <div style={styles.entreeCleanScroll}>
-              <table style={styles.entreeCleanTable}>
+            <div style={styles.entreeUltraScroll}>
+              <table style={styles.entreeUltraTable}>
                 <thead>
                   <tr>
-                    <th style={{ ...styles.entreeCleanTh, width: "44%" }}>DESCRIPTION</th>
-                    <th style={{ ...styles.entreeCleanTh, width: "14%" }}>SEMAINE</th>
-                    <th style={{ ...styles.entreeCleanTh, width: "14%" }}>MOIS</th>
-                    <th style={{ ...styles.entreeCleanTh, width: "14%" }}>ANNÉE</th>
-                    <th style={{ ...styles.entreeCleanTh, width: "8%" }}>ACTION</th>
+                    <th style={{ ...styles.entreeUltraTh, width: "44%" }}>DESCRIPTION</th>
+                    <th style={{ ...styles.entreeUltraTh, width: "14%" }}>SEMAINE</th>
+                    <th style={{ ...styles.entreeUltraTh, width: "14%" }}>MOIS</th>
+                    <th style={{ ...styles.entreeUltraTh, width: "14%" }}>ANNÉE</th>
+                    <th style={{ ...styles.entreeUltraTh, width: "8%" }}>ACTION</th>
                   </tr>
                 </thead>
 
@@ -2146,12 +2153,13 @@ export default function App() {
 
                   {lignesAffichage.map((item, index) => {
                     const montants = calculRevenu(item);
+                    const mode = normaliserMode(item.mode || "semaine");
                     const enEdition = editRevenuId === item.id;
                     const parts = separerDescriptionRevenu(item.description);
 
                     return (
                       <tr key={item.id || index}>
-                        <td style={styles.entreeCleanDescCell}>
+                        <td style={styles.entreeUltraDescCell}>
                           <span style={styles.standardMirrorRowNumber}>{index + 1}</span>
 
                           {enEdition ? (
@@ -2183,35 +2191,35 @@ export default function App() {
                           )}
                         </td>
 
-                        <td style={styles.entreeCleanInputCell}>
+                        <td style={mode === "semaine" ? styles.entreeUltraActiveCell : styles.entreeUltraInputCell}>
                           <input
-                            defaultValue={formatNombreInput(montants.semaine)}
-                            disabled={item.__vide}
-                            onBlur={(e) => modifierDepuis("semaine", item, e.target.value)}
-                            style={styles.entreeCleanAmountCellInput}
+                            value={formatNombreInput(montants.semaine)}
+                            disabled={!item.id}
+                            onChange={(e) => modifierDepuis("semaine", item, e.target.value)}
+                            style={styles.entreeUltraAmountCellInput}
                           />
                         </td>
 
-                        <td style={styles.entreeCleanInputCell}>
+                        <td style={mode === "mois" ? styles.entreeUltraActiveCell : styles.entreeUltraInputCell}>
                           <input
-                            defaultValue={formatNombreInput(montants.mois)}
-                            disabled={item.__vide}
-                            onBlur={(e) => modifierDepuis("mois", item, e.target.value)}
-                            style={styles.entreeCleanAmountCellInput}
+                            value={formatNombreInput(montants.mois)}
+                            disabled={!item.id}
+                            onChange={(e) => modifierDepuis("mois", item, e.target.value)}
+                            style={styles.entreeUltraAmountCellInput}
                           />
                         </td>
 
-                        <td style={styles.entreeCleanInputCell}>
+                        <td style={mode === "annee" ? styles.entreeUltraActiveCell : styles.entreeUltraInputCell}>
                           <input
-                            defaultValue={formatNombreInput(montants.annee)}
-                            disabled={item.__vide}
-                            onBlur={(e) => modifierDepuis("annee", item, e.target.value)}
-                            style={styles.entreeCleanAmountCellInput}
+                            value={formatNombreInput(montants.annee)}
+                            disabled={!item.id}
+                            onChange={(e) => modifierDepuis("annee", item, e.target.value)}
+                            style={styles.entreeUltraAmountCellInput}
                           />
                         </td>
 
-                        <td style={styles.entreeCleanActionCell}>
-                          {!item.__vide && (
+                        <td style={styles.entreeUltraActionCell}>
+                          {!!item.id && (
                             <div style={styles.entreeCleanActionGroup}>
                               {enEdition ? (
                                 <>
@@ -2262,11 +2270,11 @@ export default function App() {
                   })}
 
                   <tr>
-                    <td style={styles.entreeCleanTotalLabel}>GAINS TOTAL</td>
-                    <td style={styles.entreeCleanTotalMoney}>{formatArgent(totalSemaine)}</td>
-                    <td style={styles.entreeCleanTotalMoney}>{formatArgent(totalMois)}</td>
-                    <td style={styles.entreeCleanTotalMoney}>{formatArgent(totalAnnee)}</td>
-                    <td style={styles.entreeCleanTotalLabel}></td>
+                    <td style={styles.entreeUltraTotalLabel}>GAINS TOTAL</td>
+                    <td style={styles.entreeUltraTotalMoney}>{formatArgent(totalSemaine)}</td>
+                    <td style={styles.entreeUltraTotalMoney}>{formatArgent(totalMois)}</td>
+                    <td style={styles.entreeUltraTotalMoney}>{formatArgent(totalAnnee)}</td>
+                    <td style={styles.entreeUltraTotalLabel}></td>
                   </tr>
                 </tbody>
               </table>
@@ -7589,6 +7597,207 @@ const styles = {
     color: "#020617",
     fontWeight: "950",
     cursor: "pointer",
+  },
+
+  entreeUltraShell: {
+    width: "100%",
+    color: "#020617",
+  },
+
+  entreeUltraToolbar: {
+    minHeight: "56px",
+    margin: "0 12px 10px",
+    padding: "9px",
+    borderRadius: "18px",
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    background: "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(2,6,23,0.96))",
+    border: "1px solid rgba(56,189,248,0.36)",
+    boxShadow: "0 0 24px rgba(14,165,233,0.18), inset 0 1px 0 rgba(255,255,255,0.08)",
+    overflowX: "auto",
+  },
+
+  entreeUltraSelect: {
+    height: "38px",
+    minWidth: "380px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.55)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "900",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  entreeUltraTextInput: {
+    height: "38px",
+    minWidth: "220px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  entreeUltraAmountInput: {
+    height: "38px",
+    width: "135px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "900",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  entreeUltraModeSelect: {
+    height: "38px",
+    width: "135px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "900",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  entreeUltraAddButton: {
+    height: "40px",
+    minWidth: "122px",
+    padding: "0 16px",
+    borderRadius: "13px",
+    border: "1px solid rgba(255,255,255,0.26)",
+    background: "linear-gradient(180deg, #facc15 0%, #ca8a04 100%)",
+    color: "#020617",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 0 18px rgba(250,204,21,0.35), inset 0 1px 0 rgba(255,255,255,0.42)",
+    flex: "0 0 auto",
+  },
+
+  entreeUltraPanel: {
+    width: "calc(100vw - 26px)",
+    margin: "0 auto",
+    borderRadius: "18px",
+    overflow: "hidden",
+    border: "1px solid #c7d2fe",
+    background: "#ffffff",
+    color: "#020617",
+    boxShadow: "0 24px 80px rgba(0,0,0,0.38)",
+  },
+
+  entreeUltraHeader: {
+    padding: "16px 24px 18px",
+    background: "#111827",
+    color: "#ffffff",
+  },
+
+  entreeUltraNote: {
+    padding: "10px 24px",
+    background: "#eaf4ff",
+    color: "#020617",
+    fontSize: "12px",
+    fontWeight: "800",
+    borderBottom: "1px solid #cbd5e1",
+  },
+
+  entreeUltraScroll: {
+    maxHeight: "430px",
+    overflow: "auto",
+    background: "#ffffff",
+  },
+
+  entreeUltraTable: {
+    width: "100%",
+    minWidth: "1050px",
+    borderCollapse: "collapse",
+    tableLayout: "fixed",
+    background: "#ffffff",
+    color: "#020617",
+    fontFamily: "Arial, sans-serif",
+  },
+
+  entreeUltraTh: {
+    background: "#020617",
+    color: "#ffffff",
+    padding: "8px",
+    border: "1px solid #94a3b8",
+    fontSize: "13px",
+    fontWeight: "950",
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+
+  entreeUltraDescCell: {
+    background: "#f8fafc",
+    border: "1px solid #94a3b8",
+    padding: "4px 8px",
+    fontSize: "13px",
+    fontWeight: "800",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+
+  entreeUltraInputCell: {
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    padding: "4px",
+    textAlign: "right",
+  },
+
+  entreeUltraActiveCell: {
+    background: "#ecfdf5",
+    border: "2px solid #22c55e",
+    padding: "3px",
+    textAlign: "right",
+    boxShadow: "inset 0 0 10px rgba(34,197,94,0.16)",
+  },
+
+  entreeUltraAmountCellInput: {
+    width: "100%",
+    height: "26px",
+    borderRadius: "7px",
+    border: "1px solid #93c5fd",
+    background: "#f8fbff",
+    color: "#020617",
+    fontWeight: "900",
+    textAlign: "right",
+    padding: "0 8px",
+    outline: "none",
+  },
+
+  entreeUltraActionCell: {
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    padding: "4px",
+    textAlign: "center",
+  },
+
+  entreeUltraTotalLabel: {
+    background: "#548235",
+    color: "#ffffff",
+    border: "1px solid #020617",
+    padding: "8px",
+    fontSize: "16px",
+    fontWeight: "950",
+    textAlign: "left",
+  },
+
+  entreeUltraTotalMoney: {
+    background: "#548235",
+    color: "#ffffff",
+    border: "1px solid #020617",
+    padding: "8px",
+    fontSize: "16px",
+    fontWeight: "950",
+    textAlign: "right",
+    whiteSpace: "nowrap",
   },
 
 };
