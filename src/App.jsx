@@ -3430,6 +3430,8 @@ export default function App() {
           )}
         </div>
           </>
+        ) : compteEstEntreeArgent(compteActif) ? (
+          renduTableauEntreeArgent()
         ) : compteEstArgentAccumule(compteActif) ? (
           renduTableau3177()
         ) : (
