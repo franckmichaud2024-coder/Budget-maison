@@ -240,7 +240,7 @@ function semainesEnSerie(echeance) {
 
 
 function semainesAfficheesPourLigne(item) {
-  const liste = semainesAfficheesPourLigne(item);
+  const liste = semainesEnSerie(item.echeance);
 
   if (normaliserMode(item.mode) === "semaine") {
     return liste.slice(0, 5);
