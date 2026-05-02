@@ -6652,7 +6652,6 @@ const styles = {
     boxShadow: "0 0 18px rgba(250,204,21,0.34), inset 0 1px 0 rgba(255,255,255,0.4)",
     flex: "0 0 auto",
   },
-,
 
   incomeBankShellBright: {
     width: "calc(100vw - 24px)",
