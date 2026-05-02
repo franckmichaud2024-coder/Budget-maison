@@ -1910,9 +1910,6 @@ export default function App() {
 
   function renduTableauEntreeArgent() {
     const revenusLignes = data.filter((item) => item.type === "revenu");
-
-    const totalGains = revenusLignes.reduce((acc, item) => acc + calculerMontants(item).semaine, 0);
-
     const lignesAffichage = revenusLignes.length
       ? revenusLignes
       : DESCRIPTIONS_REVENUS.filter((desc) => desc !== "AUTRE").map((desc, index) => ({
@@ -1921,15 +1918,76 @@ export default function App() {
           montant: 0,
           mode: "semaine",
           type: "revenu",
-          semaines_payees: [],
-          echeance: null,
-          date: "",
+          depenses_miroir: [0, 0, 0, 0, 0, 0, 0],
           __vide: true,
         }));
 
+    const lireDepensesMiroir = (item) => {
+      if (Array.isArray(item.depenses_miroir)) {
+        return [...item.depenses_miroir, 0, 0, 0, 0, 0, 0, 0].slice(0, 7);
+      }
+
+      if (Array.isArray(item.depenses)) {
+        return [...item.depenses, 0, 0, 0, 0, 0, 0, 0].slice(0, 7);
+      }
+
+      return [0, 0, 0, 0, 0, 0, 0];
+    };
+
+    const gainLigne = (item) => {
+      if (item.__vide) return 0;
+      return calculerMontants(item).semaine;
+    };
+
+    const depenseLigne = (item) => lireDepensesMiroir(item).reduce((acc, valeur) => acc + Number(valeur || 0), 0);
+    const soldeLigne = (item) => gainLigne(item) - depenseLigne(item);
+
+    const totalGains = lignesAffichage.reduce((acc, item) => acc + gainLigne(item), 0);
+    const totalSolde = lignesAffichage.reduce((acc, item) => acc + soldeLigne(item), 0);
+
+    async function modifierRevenu(item, champs) {
+      if (item.__vide) return;
+
+      const { error } = await supabase
+        .from("budget_transactions")
+        .update(champs)
+        .eq("id", item.id)
+        .eq("user_id", getUserId());
+
+      if (error) {
+        setErreur(error.message);
+        return;
+      }
+
+      setData((prev) =>
+        prev.map((ligne) => (ligne.id === item.id ? { ...ligne, ...champs } : ligne))
+      );
+    }
+
+    async function modifierGain(item, valeur) {
+      const montantNumber = Number(String(valeur).replace(",", "."));
+      if (Number.isNaN(montantNumber)) return;
+
+      await modifierRevenu(item, {
+        montant: montantNumber,
+      });
+    }
+
+    async function modifierDepenseMiroir(item, index, valeur) {
+      const montantNumber = Number(String(valeur).replace(",", "."));
+      if (Number.isNaN(montantNumber)) return;
+
+      const depenses = lireDepensesMiroir(item);
+      depenses[index] = montantNumber;
+
+      await modifierRevenu(item, {
+        depenses_miroir: depenses,
+      });
+    }
+
     return (
       <div key={compteActif} style={styles.pageSwitchAnimation}>
-        <div style={styles.incomeBankShellBright}>
+        <div style={styles.incomeMirrorShell}>
           <div style={styles.incomeBankTitle}>ENTRÉE D’ARGENT</div>
 
           <div style={styles.incomeBankToolbar}>
@@ -2001,61 +2059,90 @@ export default function App() {
             </button>
           </div>
 
-          <div style={styles.incomeBankTableShellBright}>
-            <table style={styles.incomeBankTableBright}>
-              <thead>
-                <tr>
-                  <th style={{ ...styles.bank3177Header, width: "34%" }}>DESCRIPTION</th>
-                  <th style={{ ...styles.bank3177Header, width: "12%" }}>GAINS</th>
-                  <th style={{ ...styles.bank3177Header }} colSpan={7}>DÉPENSES</th>
-                  <th style={{ ...styles.bank3177Header, width: "12%" }}>SOLDE</th>
-                </tr>
-                <tr>
-                  <th style={styles.bank3177SubHeader}></th>
-                  <th style={styles.bank3177SubHeader}></th>
-                  {Array.from({ length: 7 }).map((_, index) => (
-                    <th key={index} style={styles.bank3177SubHeader}>Dép. {index + 1}</th>
-                  ))}
-                  <th style={styles.bank3177SubHeader}></th>
-                </tr>
-              </thead>
+          <div style={styles.incomeMirrorPanel}>
+            <div style={styles.incomeMirrorTop}>
+              <div style={styles.incomeMirrorKicker}>COMPTE MIROIR AUTOMATIQUE</div>
+              <div style={styles.incomeMirrorTitle}>Entrée d’argent</div>
+            </div>
 
-              <tbody>
-                {lignesAffichage.map((item, index) => {
-                  const gain = item.__vide ? 0 : calculerMontants(item).semaine;
-                  return (
-                    <tr key={item.id || index}>
-                      <td style={styles.bank3177DescriptionCell}>
-                        <span style={styles.bank3177RowNumber}>{index + 1}</span>
-                        {item.description}
-                      </td>
+            <div style={styles.incomeMirrorNote}>
+              Les descriptions sont synchronisées avec l’onglet Entrée d’argent. Tu peux modifier les gains et entrer jusqu’à 7 dépenses par ligne.
+            </div>
 
-                      <td style={styles.bank3177InputCell}>
-                        <div style={styles.bank3177AmountBox}>{formatArgent(gain)}</div>
-                      </td>
+            <div style={styles.incomeMirrorScroll}>
+              <table style={styles.incomeMirrorTable}>
+                <thead>
+                  <tr>
+                    <th style={{ ...styles.incomeMirrorTh, width: "34%" }}>DESCRIPTION</th>
+                    <th style={{ ...styles.incomeMirrorTh, width: "12%" }}>GAINS</th>
+                    <th style={styles.incomeMirrorTh} colSpan={7}>DÉPENSES</th>
+                    <th style={{ ...styles.incomeMirrorTh, width: "12%" }}>SOLDE</th>
+                  </tr>
+                  <tr>
+                    <th style={styles.incomeMirrorSubTh}></th>
+                    <th style={styles.incomeMirrorSubTh}></th>
+                    {Array.from({ length: 7 }).map((_, index) => (
+                      <th key={index} style={styles.incomeMirrorSubTh}>Dép. {index + 1}</th>
+                    ))}
+                    <th style={styles.incomeMirrorSubTh}></th>
+                  </tr>
+                </thead>
 
-                      {Array.from({ length: 7 }).map((_, depIndex) => (
-                        <td key={depIndex} style={styles.bank3177InputCell}>
-                          <div style={styles.bank3177AmountBox}>0.00</div>
+                <tbody>
+                  {lignesAffichage.map((item, index) => {
+                    const gain = gainLigne(item);
+                    const depenses = lireDepensesMiroir(item);
+                    const solde = soldeLigne(item);
+
+                    return (
+                      <tr key={item.id || index}>
+                        <td style={styles.incomeMirrorDescCell}>
+                          <span style={styles.bank3177RowNumber}>{index + 1}</span>
+                          <input
+                            value={item.description || ""}
+                            disabled={item.__vide}
+                            onChange={(e) => modifierRevenu(item, { description: e.target.value })}
+                            style={styles.incomeMirrorDescInput}
+                          />
                         </td>
-                      ))}
 
-                      <td style={styles.bank3177SoldeCell}>{formatArgent(gain)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        <td style={styles.incomeMirrorCell}>
+                          <input
+                            value={formatNombreInput(gain)}
+                            disabled={item.__vide}
+                            onChange={(e) => modifierGain(item, e.target.value)}
+                            style={styles.incomeMirrorInput}
+                          />
+                        </td>
 
-            <div style={styles.bank3177Footer}>
-              <div style={styles.bank3177FooterMetric}>
-                <span style={styles.bank3177FooterLabel}>Gains</span>
-                <strong style={styles.bank3177FooterValue}>{formatArgent(totalGains)}</strong>
+                        {depenses.map((valeur, depIndex) => (
+                          <td key={depIndex} style={styles.incomeMirrorCell}>
+                            <input
+                              value={formatNombreInput(valeur)}
+                              disabled={item.__vide}
+                              onChange={(e) => modifierDepenseMiroir(item, depIndex, e.target.value)}
+                              style={styles.incomeMirrorInput}
+                            />
+                          </td>
+                        ))}
+
+                        <td style={styles.incomeMirrorSoldeCell}>{formatArgent(solde)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={styles.incomeMirrorFooter}>
+              <div style={styles.incomeMirrorFooterMetric}>
+                <span style={styles.incomeMirrorFooterLabel}>GAINS</span>
+                <strong style={styles.incomeMirrorFooterValue}>{formatArgent(totalGains)}</strong>
               </div>
 
-              <div style={{ ...styles.bank3177FooterMetric, ...styles.bank3177FooterSolde }}>
-                <span style={styles.bank3177FooterLabel}>Solde total</span>
-                <strong style={styles.bank3177FooterValue}>{formatArgent(totalGains)}</strong>
+              <div style={styles.incomeMirrorFooterMetric}>
+                <span style={styles.incomeMirrorFooterLabel}>SOLDE TOTAL</span>
+                <strong style={styles.incomeMirrorFooterValue}>{formatArgent(totalSolde)}</strong>
               </div>
             </div>
           </div>
@@ -6677,6 +6764,184 @@ const styles = {
     background: "#ffffff",
     color: "#020617",
     fontFamily: "Arial, sans-serif",
+  },
+,
+
+  incomeMirrorShell: {
+    width: "100%",
+    color: "#020617",
+  },
+
+  incomeMirrorPanel: {
+    width: "calc(100vw - 26px)",
+    margin: "8px auto 0",
+    borderRadius: "18px",
+    overflow: "hidden",
+    border: "1px solid #c7d2fe",
+    background: "#ffffff",
+    boxShadow: "0 24px 80px rgba(0,0,0,0.38)",
+  },
+
+  incomeMirrorTop: {
+    padding: "16px 24px 18px",
+    background: "#111827",
+    color: "#ffffff",
+  },
+
+  incomeMirrorKicker: {
+    color: "#22d3ee",
+    fontSize: "12px",
+    fontWeight: "950",
+    letterSpacing: "2px",
+    textTransform: "uppercase",
+  },
+
+  incomeMirrorTitle: {
+    marginTop: "4px",
+    fontSize: "26px",
+    fontWeight: "950",
+    color: "#ffffff",
+    textShadow: "0 2px 0 rgba(0,0,0,0.65)",
+  },
+
+  incomeMirrorNote: {
+    padding: "10px 24px",
+    background: "#eaf4ff",
+    color: "#020617",
+    fontSize: "12px",
+    fontWeight: "800",
+    borderBottom: "1px solid #cbd5e1",
+  },
+
+  incomeMirrorScroll: {
+    maxHeight: "430px",
+    overflow: "auto",
+    background: "#ffffff",
+  },
+
+  incomeMirrorTable: {
+    width: "100%",
+    minWidth: "1600px",
+    borderCollapse: "collapse",
+    tableLayout: "fixed",
+    background: "#ffffff",
+    color: "#020617",
+    fontFamily: "Arial, sans-serif",
+  },
+
+  incomeMirrorTh: {
+    background: "#020617",
+    color: "#ffffff",
+    padding: "8px",
+    border: "1px solid #94a3b8",
+    fontSize: "13px",
+    fontWeight: "950",
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+
+  incomeMirrorSubTh: {
+    background: "#eaf4ff",
+    color: "#020617",
+    padding: "6px",
+    border: "1px solid #cbd5e1",
+    fontSize: "11px",
+    fontWeight: "900",
+    textAlign: "center",
+  },
+
+  incomeMirrorDescCell: {
+    background: "#f8fafc",
+    border: "1px solid #94a3b8",
+    padding: "4px 8px",
+    fontSize: "13px",
+    fontWeight: "800",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+
+  incomeMirrorDescInput: {
+    width: "100%",
+    height: "28px",
+    borderRadius: "6px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 8px",
+    outline: "none",
+  },
+
+  incomeMirrorCell: {
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    padding: "4px",
+    textAlign: "right",
+  },
+
+  incomeMirrorInput: {
+    width: "100%",
+    height: "26px",
+    borderRadius: "7px",
+    border: "1px solid #93c5fd",
+    background: "#f8fbff",
+    color: "#020617",
+    fontWeight: "900",
+    textAlign: "right",
+    padding: "0 8px",
+    outline: "none",
+  },
+
+  incomeMirrorSoldeCell: {
+    background: "#fff7ed",
+    border: "1px solid #cbd5e1",
+    color: "#020617",
+    fontWeight: "950",
+    fontSize: "13px",
+    padding: "6px 10px",
+    textAlign: "right",
+    whiteSpace: "nowrap",
+  },
+
+  incomeMirrorFooter: {
+    minHeight: "72px",
+    background: "#dbeafe",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "24px",
+    padding: "12px 18px",
+    borderTop: "1px solid #93c5fd",
+  },
+
+  incomeMirrorFooterMetric: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+  },
+
+  incomeMirrorFooterLabel: {
+    color: "#020617",
+    fontSize: "12px",
+    fontWeight: "950",
+    letterSpacing: "1px",
+    textTransform: "uppercase",
+  },
+
+  incomeMirrorFooterValue: {
+    minWidth: "150px",
+    height: "40px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    padding: "0 14px",
+    borderRadius: "12px",
+    background: "#020617",
+    color: "#86efac",
+    fontSize: "18px",
+    fontWeight: "950",
+    boxShadow: "0 0 16px rgba(34,197,94,0.30)",
   },
 
 };
