@@ -87,8 +87,7 @@ function creerIdSnapshot() {
 
 
 const DESCRIPTIONS_REVENUS = [
-  "DÉPÔT DE PAYE 1",
-  "DÉPÔT DE PAYE 2",
+  "DÉPÔT DE PAYE ",  
   "PAIEMENT SOUTIEN ENF.PROV",
   "PREST.UNIVERS.GARDE ENFANT CANADA",
   "PRESTATION POUR ENFANT CANADA",
@@ -2281,26 +2280,44 @@ export default function App() {
               </table>
             </div>
 
-            <div style={styles.entreeUltraFooterAutoGrid}>
-              <div style={styles.entreeUltraFooterEmpty}></div>
+            <table style={styles.entreeUltraFooterTable}>
+              <colgroup>
+                <col style={styles.entreeUltraColDescription} />
+                <col style={styles.entreeUltraColMontant} />
+                <col style={styles.entreeUltraColMontant} />
+                <col style={styles.entreeUltraColMontant} />
+                <col style={styles.entreeUltraColAction} />
+              </colgroup>
 
-              <div style={styles.entreeUltraFooterAutoColumn}>
-                <span style={styles.entreeUltraFooterLabelSmall}>GAINS SEMAINE</span>
-                <strong style={styles.entreeUltraFooterValueAuto}>{formatArgent(totalSemaine)}</strong>
-              </div>
+              <tbody>
+                <tr>
+                  <td style={styles.entreeUltraFooterTd}></td>
 
-              <div style={styles.entreeUltraFooterAutoColumn}>
-                <span style={styles.entreeUltraFooterLabelSmall}>GAINS MOIS</span>
-                <strong style={styles.entreeUltraFooterValueAuto}>{formatArgent(totalMois)}</strong>
-              </div>
+                  <td style={styles.entreeUltraFooterTd}>
+                    <div style={styles.entreeUltraFooterBox}>
+                      <span style={styles.entreeUltraFooterBoxLabel}>GAINS SEMAINE</span>
+                      <strong style={styles.entreeUltraFooterBoxValue}>{formatArgent(totalSemaine)}</strong>
+                    </div>
+                  </td>
 
-              <div style={styles.entreeUltraFooterAutoColumn}>
-                <span style={styles.entreeUltraFooterLabelSmall}>GAINS ANNÉE</span>
-                <strong style={styles.entreeUltraFooterValueAuto}>{formatArgent(totalAnnee)}</strong>
-              </div>
+                  <td style={styles.entreeUltraFooterTd}>
+                    <div style={styles.entreeUltraFooterBox}>
+                      <span style={styles.entreeUltraFooterBoxLabel}>GAINS MOIS</span>
+                      <strong style={styles.entreeUltraFooterBoxValue}>{formatArgent(totalMois)}</strong>
+                    </div>
+                  </td>
 
-              <div style={styles.entreeUltraFooterEmpty}></div>
-            </div>
+                  <td style={styles.entreeUltraFooterTd}>
+                    <div style={styles.entreeUltraFooterBox}>
+                      <span style={styles.entreeUltraFooterBoxLabel}>GAINS ANNÉE</span>
+                      <strong style={styles.entreeUltraFooterBoxValue}>{formatArgent(totalAnnee)}</strong>
+                    </div>
+                  </td>
+
+                  <td style={styles.entreeUltraFooterTd}></td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -6938,7 +6955,7 @@ const styles = {
     width: "100%",
     minWidth: "1680px",
     borderCollapse: "collapse",
-    tableLayout: "fixed",
+    tableLayout: "auto",
     background: "#ffffff",
     color: "#020617",
     fontFamily: "Arial, sans-serif",
@@ -7000,7 +7017,7 @@ const styles = {
     width: "100%",
     minWidth: "1600px",
     borderCollapse: "collapse",
-    tableLayout: "fixed",
+    tableLayout: "auto",
     background: "#ffffff",
     color: "#020617",
     fontFamily: "Arial, sans-serif",
@@ -7173,7 +7190,7 @@ const styles = {
     width: "100%",
     minWidth: "1650px",
     borderCollapse: "collapse",
-    tableLayout: "fixed",
+    tableLayout: "auto",
     background: "#ffffff",
     color: "#020617",
     fontFamily: "Arial, sans-serif",
@@ -7434,7 +7451,7 @@ const styles = {
     width: "100%",
     minWidth: "1050px",
     borderCollapse: "collapse",
-    tableLayout: "fixed",
+    tableLayout: "auto",
     background: "#ffffff",
     color: "#020617",
     fontFamily: "Arial, sans-serif",
@@ -7762,7 +7779,7 @@ const styles = {
     width: "100%",
     minWidth: "1050px",
     borderCollapse: "collapse",
-    tableLayout: "fixed",
+    tableLayout: "auto",
     background: "#ffffff",
     color: "#020617",
     fontFamily: "Arial, sans-serif",
@@ -7986,6 +8003,70 @@ const styles = {
     boxShadow: "0 0 14px rgba(34,197,94,0.30)",
     whiteSpace: "nowrap",
     boxSizing: "border-box",
+  },
+
+  entreeUltraColDescription: {
+    width: "auto",
+  },
+
+  entreeUltraColMontant: {
+    width: "15%",
+    minWidth: "170px",
+  },
+
+  entreeUltraColAction: {
+    width: "90px",
+  },
+
+  entreeUltraFooterTable: {
+    width: "100%",
+    minWidth: "1050px",
+    tableLayout: "auto",
+    borderCollapse: "collapse",
+    background: "#dbeafe",
+    color: "#020617",
+    fontFamily: "Arial, sans-serif",
+    borderTop: "1px solid #93c5fd",
+  },
+
+  entreeUltraFooterTd: {
+    height: "72px",
+    padding: "10px 8px",
+    textAlign: "center",
+    verticalAlign: "middle",
+    boxSizing: "border-box",
+  },
+
+  entreeUltraFooterBox: {
+    width: "100%",
+    maxWidth: "170px",
+    minWidth: "130px",
+    height: "38px",
+    margin: "0 auto",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+    borderRadius: "12px",
+    background: "#020617",
+    color: "#86efac",
+    boxShadow: "0 0 16px rgba(34,197,94,0.30)",
+    padding: "0 10px",
+    boxSizing: "border-box",
+    whiteSpace: "nowrap",
+  },
+
+  entreeUltraFooterBoxLabel: {
+    color: "#020617",
+    display: "none",
+  },
+
+  entreeUltraFooterBoxValue: {
+    color: "#86efac",
+    fontSize: "16px",
+    fontWeight: "950",
+    textAlign: "center",
+    whiteSpace: "nowrap",
   },
 
 };
