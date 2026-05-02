@@ -4,11 +4,28 @@ import { supabase } from "./supabase";
 const semaines = Array.from({ length: 52 }, (_, i) => i + 1);
 
 const COMPTES_BUDGET = [
-  "7570 - Procédures",
+  "Entrée d’argent",
   "3185 - Enveloppes",
   "3177 - Argent accumulé",
-  "Entrée d’argent",
+  "7570 - Procédures",
 ];
+
+function ordonnerComptesBudget(liste = []) {
+  const ordreFixe = COMPTES_BUDGET;
+  const uniques = Array.from(new Set([...(liste || []), ...ordreFixe]));
+
+  return uniques.sort((a, b) => {
+    const ia = ordreFixe.indexOf(a);
+    const ib = ordreFixe.indexOf(b);
+
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+
+    return String(a).localeCompare(String(b), "fr", { sensitivity: "base" });
+  });
+}
+
 
 
 const SNAPSHOT_KEY = "budget_maison_snapshots_v1";
@@ -315,7 +332,7 @@ export default function App() {
 
   const [blocs] = useState(BLOCS_FIXES);
   const [blocActif, setBlocActif] = useState(BLOCS_FIXES[0]);
-  const [comptesBudget, setComptesBudget] = useState(COMPTES_BUDGET);
+  const [comptesBudget, setComptesBudget] = useState(() => ordonnerComptesBudget(COMPTES_BUDGET));
   const [compteActif, setCompteActif] = useState(COMPTES_BUDGET[0]);
   const [nouveauCompte, setNouveauCompte] = useState("");
   const [dragCompte, setDragCompte] = useState(null);
@@ -405,7 +422,7 @@ export default function App() {
     }
 
     const prochaineListe = [...comptesBudget, nom];
-    setComptesBudget(prochaineListe);
+    setComptesBudget(ordonnerComptesBudget(prochaineListe));
     setCompteActif(nom);
     setNouveauCompte("");
   }
@@ -445,7 +462,7 @@ export default function App() {
       compte === ancienCompte ? nomFinal : compte
     );
 
-    setComptesBudget(nouvelleListe);
+    setComptesBudget(ordonnerComptesBudget(nouvelleListe));
     setCompteActif(nomFinal);
 
     const { error } = await supabase
@@ -496,7 +513,7 @@ export default function App() {
     }
 
     const prochaineListe = comptesBudget.filter((c) => c !== compteActif);
-    setComptesBudget(prochaineListe);
+    setComptesBudget(ordonnerComptesBudget(prochaineListe));
     setCompteActif(prochaineListe[0]);
     setData([]);
   }
@@ -607,7 +624,7 @@ export default function App() {
       c === ancienneValeur ? nouveauNom : c
     );
 
-    setComptesBudget(prochaineListe);
+    setComptesBudget(ordonnerComptesBudget(prochaineListe));
 
     if (compteActif === ancienneValeur) {
       setCompteActif(nouveauNom);
@@ -716,7 +733,7 @@ export default function App() {
     if (!table) return;
 
     const updateInfo = () => {
-      const max = Math.max(0, table.scrollWidth - table.clientWidth + 650);
+      const max = Math.max(0, table.scrollWidth - table.clientWidth + 320);
       setScrollInfo({
         left: table.scrollLeft,
         max,
@@ -755,7 +772,7 @@ export default function App() {
 
     // Calcul réel du scroll disponible.
     // Le +220 donne un coussin visuel pour atteindre la dernière semaine complètement.
-    const max = Math.max(0, table.scrollWidth - table.clientWidth + 650);
+    const max = Math.max(0, table.scrollWidth - table.clientWidth + 320);
     if (max <= 0) return;
 
     const nextLeft = Math.max(0, Math.min(left, max));
@@ -780,7 +797,7 @@ export default function App() {
     const table = tableScrollRef.current;
     if (!table) return;
 
-    const max = Math.max(0, table.scrollWidth - table.clientWidth + 650);
+    const max = Math.max(0, table.scrollWidth - table.clientWidth + 320);
 
     if (position === "start") bougerScroll(0);
     if (position === "middle") bougerScroll(max / 2);
@@ -3355,7 +3372,6 @@ export default function App() {
                 <th style={styles.transferHeader}>
                   TRANSFERT
                 </th>
-                    <th style={styles.transferSpacerHeader}></th>
               </tr>
 
             </thead>
@@ -3669,7 +3685,6 @@ export default function App() {
                                     ⇄
                                   </button>
                                 </td>
-                          <td style={styles.transferSpacerCell}></td>
                               </tr>
 
                               {/* Ligne du bas : cases X cliquables */}
@@ -4154,8 +4169,8 @@ const styles = {
   },
 
   transferButton: {
-    minWidth: "70px",
-    height: "30px",
+    minWidth: "58px",
+    height: "28px",
     borderRadius: "9px",
     border: "1px solid #93c5fd",
     background: "#eaf3ff",
@@ -4167,8 +4182,8 @@ const styles = {
   },
 
   transferColumnCell: {
-    width: "130px",
-    minWidth: "130px",
+    width: "82px",
+    minWidth: "82px",
     textAlign: "center",
     verticalAlign: "middle",
     background: "#f8fafc",
@@ -4188,7 +4203,7 @@ const styles = {
     borderRight: "1px solid rgba(15,23,42,0.22)",
     textAlign: "center",
     whiteSpace: "nowrap",
-    minWidth: "130px",
+    minWidth: "82px",
   },
 
   amountPaleBadge: {
@@ -4267,8 +4282,8 @@ const styles = {
   },
 
   clearXRowButton: {
-    minWidth: "70px",
-    height: "30px",
+    minWidth: "58px",
+    height: "28px",
     padding: "0 10px",
     borderRadius: "10px",
     border: "1px solid rgba(56,189,248,0.58)",
@@ -4638,7 +4653,7 @@ const styles = {
 
   echeanceEditButton: {
     minWidth: "42px",
-    height: "30px",
+    height: "28px",
     padding: "0 10px",
     borderRadius: "8px",
     border: "1px solid #93c5fd",
@@ -6297,7 +6312,7 @@ const styles = {
     borderCollapse: "separate",
     borderSpacing: 0,
     tableLayout: "fixed",
-    minWidth: "3600px",
+    minWidth: "3200px",
     color: "#111827",
     fontSize: "12px",
   },
@@ -6380,7 +6395,7 @@ const styles = {
     borderRight: "1px solid rgba(15, 23, 42, 0.16)",
     borderBottom: "1px solid rgba(15, 23, 42, 0.16)",
     padding: "4px 6px",
-    height: "30px",
+    height: "28px",
     textAlign: "center",
     color: "#0f172a",
     fontSize: "12px",
@@ -6468,7 +6483,7 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.28)",
     borderRadius: "10px",
     width: "34px",
-    height: "30px",
+    height: "28px",
     cursor: "pointer",
     fontSize: "15px",
     fontWeight: "900",
@@ -6553,7 +6568,6 @@ const styles = {
 
   bottomScroll: {
     overflowX: "auto",
-    paddingRight: "180px",
     overflowY: "hidden",
     height: "16px",
     background: "rgba(15, 23, 42, 0.78)",
@@ -6569,7 +6583,7 @@ const styles = {
   },
 
   passwordChangeButton: {
-    height: "30px",
+    height: "28px",
     padding: "0 10px",
     borderRadius: "12px",
     border: "1px solid rgba(56,189,248,0.34)",
@@ -7060,7 +7074,7 @@ const styles = {
 
   incomeMirrorDescInput: {
     width: "100%",
-    height: "30px",
+    height: "28px",
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     background: "#ffffff",
@@ -7249,7 +7263,7 @@ const styles = {
 
   standardMirrorDescInput: {
     width: "100%",
-    height: "30px",
+    height: "28px",
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     background: "#ffffff",
@@ -7299,7 +7313,7 @@ const styles = {
 
   standardMirrorDeleteButton: {
     width: "32px",
-    height: "30px",
+    height: "28px",
     borderRadius: "9px",
     border: "1px solid rgba(255,255,255,0.25)",
     background: "linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)",
@@ -7484,7 +7498,7 @@ const styles = {
 
   entreeCleanDescInput: {
     width: "100%",
-    height: "30px",
+    height: "28px",
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     background: "#ffffff",
@@ -7634,7 +7648,7 @@ const styles = {
 
   entreeCleanEditButton: {
     width: "32px",
-    height: "30px",
+    height: "28px",
     borderRadius: "9px",
     border: "1px solid #bae6fd",
     background: "linear-gradient(180deg, #e0f2fe, #bae6fd)",
@@ -8072,18 +8086,32 @@ const styles = {
     whiteSpace: "nowrap",
   },
 
-  transferSpacerHeader: {
-    minWidth: "90px",
-    width: "90px",
-    background: "#020617",
-    border: "none",
+  bottomTabUniform: {
+    minWidth: "145px",
+    height: "42px",
+    padding: "0 16px",
+    borderRadius: "12px 12px 0 0",
+    border: "1px solid rgba(15,23,42,0.28)",
+    borderBottom: "2px solid #020617",
+    background: "#dbeafe",
+    color: "#020617",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
   },
 
-  transferSpacerCell: {
-    minWidth: "90px",
-    width: "90px",
-    background: "#ffffff",
-    border: "none",
+  bottomTabUniformActive: {
+    minWidth: "145px",
+    height: "42px",
+    padding: "0 16px",
+    borderRadius: "12px 12px 0 0",
+    border: "1px solid rgba(15,23,42,0.20)",
+    borderBottom: "3px solid #22c55e",
+    background: "#f8fafc",
+    color: "#0f766e",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 -4px 14px rgba(34,197,94,0.18), inset 0 1px 0 rgba(255,255,255,0.90)",
   },
 
 };
