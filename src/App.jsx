@@ -178,7 +178,7 @@ const colonnesFixes = [
   { key: "echeance", width: 90 },
   { key: "x", width: 45 },
   { key: "accumule", width: 105 },
-  { key: "action", width: 150 },
+  { key: "action", width: 95 },
 ];
 
 function leftOffset(index) {
@@ -311,13 +311,7 @@ export default function App() {
   const [ligneEditionInfo, setLigneEditionInfo] = useState(null);
   const [descriptionEdition, setDescriptionEdition] = useState("");
   const [noteEdition, setNoteEdition] = useState("");
-  const [valeurs3177, setValeurs3177] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("budget_3177_valeurs") || "{}");
-    } catch {
-      return {};
-    }
-  });
+  const [valeurs3177, setValeurs3177] = useState({});
   const [input3177Actif, setInput3177Actif] = useState(null);
 
   const [showCalendarPanel, setShowCalendarPanel] = useState(false);
@@ -588,6 +582,13 @@ export default function App() {
   }
 
   async function loadData() {
+    const userId = getUserId();
+
+    if (!userId) {
+      setData([]);
+      return [];
+    }
+
     const compteSource =
       compteEstArgentAccumule(compteActif)
         ? trouverCompteParIntitule("Enveloppes")
@@ -596,6 +597,7 @@ export default function App() {
     const { data, error } = await supabase
       .from("budget_transactions")
       .select("*")
+      .eq("user_id", userId)
       .eq("compte", compteSource)
       .order("bloc", { ascending: true })
       .order("date", { ascending: false });
@@ -642,10 +644,15 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!session?.user?.id) {
+      setData([]);
+      return;
+    }
+
     loadBlocs();
     loadData();
     setSnapshots(lireSnapshots());
-  }, [compteActif]);
+  }, [compteActif, session?.user?.id]);
 
   useEffect(() => {
     const timer = setInterval(() => setNowLive(new Date()), 60000);
@@ -945,20 +952,37 @@ export default function App() {
     return session?.user?.id || null;
   }
 
+  function getValeurs3177StorageKey() {
+    return `budget_3177_valeurs_${getUserId() || "anonymous"}`;
+  }
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setValeurs3177({});
+      return;
+    }
+
+    try {
+      setValeurs3177(JSON.parse(localStorage.getItem(getValeurs3177StorageKey()) || "{}"));
+    } catch {
+      setValeurs3177({});
+    }
+  }, [session?.user?.id]);
+
   async function seConnecter(e) {
     e.preventDefault();
     setLoginError("");
     setAuthLoading(true);
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: loginEmail.trim(),
+      email: loginEmail.trim().toLowerCase(),
       password: loginPassword,
     });
 
     setAuthLoading(false);
 
     if (error) {
-      setLoginError("Courriel ou mot de passe incorrect.");
+      setLoginError(error.message || "Courriel ou mot de passe incorrect.");
       return;
     }
 
@@ -1092,7 +1116,7 @@ export default function App() {
 
     let valeursActuelles = {};
     try {
-      valeursActuelles = JSON.parse(localStorage.getItem("budget_3177_valeurs") || "{}");
+      valeursActuelles = JSON.parse(localStorage.getItem(getValeurs3177StorageKey()) || "{}");
     } catch {
       valeursActuelles = {};
     }
@@ -1109,7 +1133,7 @@ export default function App() {
       },
     };
 
-    localStorage.setItem("budget_3177_valeurs", JSON.stringify(nextValues));
+    localStorage.setItem(getValeurs3177StorageKey(), JSON.stringify(nextValues));
     setValeurs3177(nextValues);
   }
 
@@ -1139,7 +1163,7 @@ export default function App() {
 
     let valeursActuelles = {};
     try {
-      valeursActuelles = JSON.parse(localStorage.getItem("budget_3177_valeurs") || "{}");
+      valeursActuelles = JSON.parse(localStorage.getItem(getValeurs3177StorageKey()) || "{}");
     } catch {
       valeursActuelles = {};
     }
@@ -1178,7 +1202,7 @@ export default function App() {
       },
     };
 
-    localStorage.setItem("budget_3177_valeurs", JSON.stringify(nextValues));
+    localStorage.setItem(getValeurs3177StorageKey(), JSON.stringify(nextValues));
     setValeurs3177(nextValues);
 
     setErreur(
@@ -1628,7 +1652,7 @@ export default function App() {
 
   function sauvegarderValeurs3177(nextValues) {
     setValeurs3177(nextValues);
-    localStorage.setItem("budget_3177_valeurs", JSON.stringify(nextValues));
+    localStorage.setItem(getValeurs3177StorageKey(), JSON.stringify(nextValues));
   }
 
   function lireValeur3177(id, champ, defaut = 0) {
@@ -2706,6 +2730,18 @@ export default function App() {
                                       >
                                         {item.description || "-"}
                                       </button>
+
+                                      <button
+                                        onClick={() => viderXLigne(item)}
+                                        style={{
+                                          ...styles.clearXRowButton,
+                                          opacity: nbX > 0 ? 1 : 0.45,
+                                        }}
+                                        title={nbX > 0 ? `Supprimer les ${nbX} X de cette ligne` : "Aucun X sur cette ligne"}
+                                        type="button"
+                                      >
+                                        🧹 X
+                                      </button>
                                     </div>
                                   ),
                                   0,
@@ -2861,30 +2897,13 @@ export default function App() {
                                 {celluleFixe(nbX, 6, { verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(formatArgent(acc), 7, { ...styles.accumuleCell, verticalAlign: "middle" }, { rowSpan: 2 })}
                                 {celluleFixe(
-                                  <div style={styles.actionButtonGroup}>
-                                    <button
-                                      className="delete-row-button"
-                                      onClick={() => viderXLigne(item)}
-                                      style={{
-                                        ...styles.clearXRowButton,
-                                        opacity: nbX > 0 ? 1 : 0.45,
-                                      }}
-                                      title={nbX > 0 ? `Supprimer les ${nbX} X de cette ligne` : "Aucun X sur cette ligne"}
-                                      type="button"
-                                    >
-                                      🧹 X
-                                    </button>
-
-                                    <button
-                                      className="delete-row-button"
-                                      onClick={() => supprimerLigne(item)}
-                                      style={styles.deleteButton}
-                                      title="Supprimer la ligne"
-                                      type="button"
-                                    >
-                                      🗑️
-                                    </button>
-                                  </div>,
+                                  <button
+                                    className="delete-row-button"
+                                    onClick={() => supprimerLigne(item)}
+                                    style={styles.deleteButton} title="Supprimer cette ligne"
+                                   title="Supprimer la ligne">
+                                    🗑️
+                                  </button>,
                                   8,
                                   { verticalAlign: "middle" },
                                   { rowSpan: 2 }
@@ -3514,14 +3533,6 @@ const styles = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     textAlign: "left",
-  },
-
-  actionButtonGroup: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "8px",
-    width: "100%",
   },
 
   clearXRowButton: {
