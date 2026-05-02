@@ -6519,7 +6519,6 @@ const styles = {
     textAlign: "center",
     background: "#ffffff",
   },
-,
 
   incomeBankShell: {
     width: "calc(100vw - 20px)",
