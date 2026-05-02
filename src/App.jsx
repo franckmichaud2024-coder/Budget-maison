@@ -264,6 +264,11 @@ export default function App() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordLoading, setPasswordLoading] = useState(false);
 
   const tableScrollRef = useRef(null);
   const lastScrollRef = useRef(0);
@@ -995,6 +1000,44 @@ export default function App() {
     setSession(null);
     setLoginEmail("");
     setLoginPassword("");
+  }
+
+  async function changerMotDePasse(e) {
+    e.preventDefault();
+    setPasswordMessage("");
+
+    const pass = String(newPassword || "").trim();
+    const confirm = String(newPasswordConfirm || "").trim();
+
+    if (pass.length < 6) {
+      setPasswordMessage("Le mot de passe doit contenir au moins 6 caractères.");
+      return;
+    }
+
+    if (pass !== confirm) {
+      setPasswordMessage("Les deux mots de passe ne sont pas identiques.");
+      return;
+    }
+
+    setPasswordLoading(true);
+
+    const { error } = await supabase.auth.updateUser({ password: pass });
+
+    setPasswordLoading(false);
+
+    if (error) {
+      setPasswordMessage(error.message);
+      return;
+    }
+
+    setPasswordMessage("Mot de passe modifié avec succès.");
+    setNewPassword("");
+    setNewPasswordConfirm("");
+
+    window.setTimeout(() => {
+      setShowPasswordModal(false);
+      setPasswordMessage("");
+    }, 1400);
   }
 
 
@@ -2197,6 +2240,19 @@ export default function App() {
       >
         <div style={styles.miniDockHandle}>☰ Utilisateur</div>
         <div style={styles.userBadge}>🟢 {session?.user?.email}</div>
+        <button
+          onClick={() => {
+            setPasswordMessage("");
+            setNewPassword("");
+            setNewPasswordConfirm("");
+            setShowPasswordModal(true);
+          }}
+          style={styles.passwordChangeButton}
+          type="button"
+          title="Modifier mon mot de passe"
+        >
+          🔐 Mot de passe
+        </button>
       </div>
 
       <div
@@ -2250,6 +2306,59 @@ export default function App() {
           Déconnexion
         </button>
       </div>
+
+      {showPasswordModal && (
+        <div style={styles.passwordModalOverlay}>
+          <form onSubmit={changerMotDePasse} style={styles.passwordModalCard}>
+            <div style={styles.passwordModalTitle}>Modifier mon mot de passe</div>
+            <div style={styles.passwordModalSubtitle}>
+              Utilisateur : {session?.user?.email}
+            </div>
+
+            <label style={styles.loginLabel}>Nouveau mot de passe</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              style={styles.loginInput}
+              autoFocus
+            />
+
+            <label style={styles.loginLabel}>Confirmer le mot de passe</label>
+            <input
+              type="password"
+              value={newPasswordConfirm}
+              onChange={(e) => setNewPasswordConfirm(e.target.value)}
+              style={styles.loginInput}
+            />
+
+            {passwordMessage && (
+              <div style={passwordMessage.includes("succès") ? styles.passwordSuccess : styles.loginError}>
+                {passwordMessage}
+              </div>
+            )}
+
+            <div style={styles.passwordModalActions}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPasswordModal(false);
+                  setPasswordMessage("");
+                  setNewPassword("");
+                  setNewPasswordConfirm("");
+                }}
+                style={styles.cleanButton}
+              >
+                Annuler
+              </button>
+
+              <button type="submit" style={styles.loginButton} disabled={passwordLoading}>
+                {passwordLoading ? "Modification..." : "Modifier"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {showGuide && (
         <div style={styles.guideOverlay}>
@@ -5823,5 +5932,76 @@ const styles = {
   emptyLine: {
     background: "#ffffff",
     borderBottom: "1px solid #000",
+  },,
+
+  passwordChangeButton: {
+    height: "28px",
+    padding: "0 10px",
+    borderRadius: "12px",
+    border: "1px solid rgba(56,189,248,0.34)",
+    background: "linear-gradient(180deg, rgba(14,165,233,0.35), rgba(2,6,23,0.58))",
+    color: "#e0f2fe",
+    fontSize: "11px",
+    fontWeight: "900",
+    cursor: "pointer",
+    boxShadow: "0 0 14px rgba(14,165,233,0.16), inset 0 1px 0 rgba(255,255,255,0.12)",
+    whiteSpace: "nowrap",
   },
+
+  passwordModalOverlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 9999,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "rgba(2,6,23,0.72)",
+    backdropFilter: "blur(10px)",
+  },
+
+  passwordModalCard: {
+    width: "420px",
+    maxWidth: "92vw",
+    padding: "26px",
+    borderRadius: "22px",
+    background: "linear-gradient(145deg, rgba(15,23,42,0.98), rgba(7,19,38,0.98))",
+    border: "1px solid rgba(56,189,248,0.35)",
+    boxShadow: "0 30px 90px rgba(0,0,0,0.55), 0 0 35px rgba(14,165,233,0.22)",
+    color: "#ffffff",
+  },
+
+  passwordModalTitle: {
+    fontSize: "24px",
+    fontWeight: "900",
+    letterSpacing: "0.8px",
+    marginBottom: "6px",
+    color: "#ffffff",
+    textShadow: "0 2px 0 rgba(0,0,0,0.55)",
+  },
+
+  passwordModalSubtitle: {
+    fontSize: "12px",
+    color: "#93c5fd",
+    marginBottom: "18px",
+    wordBreak: "break-word",
+  },
+
+  passwordModalActions: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: "10px",
+    marginTop: "16px",
+  },
+
+  passwordSuccess: {
+    marginTop: "12px",
+    padding: "10px 12px",
+    borderRadius: "12px",
+    background: "rgba(34,197,94,0.14)",
+    border: "1px solid rgba(34,197,94,0.35)",
+    color: "#86efac",
+    fontWeight: "800",
+    fontSize: "13px",
+  },
+
 };

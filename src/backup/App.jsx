@@ -2056,8 +2056,9 @@ export default function App() {
         }
 
         .delete-row-button:hover {
-          filter: brightness(1.12);
-          transform: scale(1.06) !important;
+          filter: brightness(1.16);
+          transform: scale(1.08) !important;
+          box-shadow: 0 0 24px rgba(239,68,68,0.62), inset 0 1px 0 rgba(255,255,255,0.34) !important;
         }
 
         .glass-glow {
@@ -3541,17 +3542,18 @@ const styles = {
 
   clearXRowButton: {
     minWidth: "58px",
-    height: "26px",
-    padding: "0 8px",
-    borderRadius: "9px",
-    border: "1px solid #bfdbfe",
-    background: "#eff6ff",
-    color: "#334155",
-    fontWeight: "650",
+    height: "28px",
+    padding: "0 10px",
+    borderRadius: "10px",
+    border: "1px solid rgba(56,189,248,0.58)",
+    background: "linear-gradient(180deg, rgba(15,23,42,0.32), rgba(2,6,23,0.12))",
+    color: "#0f172a",
+    fontWeight: "900",
     fontSize: "11px",
     cursor: "pointer",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+    boxShadow: "0 0 12px rgba(56,189,248,0.16), inset 0 1px 0 rgba(255,255,255,0.45)",
     whiteSpace: "nowrap",
+    backdropFilter: "blur(8px)",
   },
 
   descriptionRowTools: {
@@ -4630,12 +4632,13 @@ const styles = {
   actionGroup: {
     display: "flex",
     alignItems: "center",
+    justifyContent: "center",
     gap: "8px",
-    padding: "6px",
-    borderRadius: "16px",
-    background: "rgba(2, 6, 23, 0.46)",
-    border: "1px solid rgba(148,163,184,0.12)",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)",
+    padding: "0",
+    borderRadius: "0",
+    background: "transparent",
+    border: "none",
+    boxShadow: "none",
   },
 
 
@@ -5718,20 +5721,20 @@ const styles = {
   },
 
   deleteButton: {
-    background: "linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)",
+    background: "linear-gradient(180deg, #ff3b3b 0%, #b91c1c 100%)",
     color: "#ffffff",
-    border: "1px solid rgba(255,255,255,0.22)",
-    borderRadius: "9px",
+    border: "1px solid rgba(255,255,255,0.28)",
+    borderRadius: "10px",
     width: "34px",
     height: "28px",
     cursor: "pointer",
     fontSize: "15px",
     fontWeight: "900",
     lineHeight: "24px",
-    boxShadow: "0 0 14px rgba(239,68,68,0.30), inset 0 1px 0 rgba(255,255,255,0.25)",
+    boxShadow: "0 0 18px rgba(239,68,68,0.42), inset 0 1px 0 rgba(255,255,255,0.32)",
     opacity: 0,
     transform: "scale(0.92)",
-    transition: "opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease",
+    transition: "opacity 0.18s ease, transform 0.18s ease, filter 0.18s ease, box-shadow 0.18s ease",
   },
 
   totalLeft: {
