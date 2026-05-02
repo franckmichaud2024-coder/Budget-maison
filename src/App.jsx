@@ -3350,9 +3350,7 @@ export default function App() {
                 {headerFixe("X", 6)}
                 {headerFixe("ACCUMULÉ", 7)}
                 {headerFixe("ACTION", 8)}
-                <th style={styles.calendarTitle} colSpan={52}>
-                  CALENDRIER POUR LES SEMAINES
-                </th>
+                <th style={styles.calendrierStandardBar}>CALENDRIER</th>
                 <th style={styles.transferHeader}>
                   TRANSFERT
                 </th>
@@ -4113,10 +4111,10 @@ const styles = {
 
   bank3177Title: {
     color: "#ffffff",
-    fontSize: "24px",
+    fontSize: "13px",
     fontWeight: "950",
     letterSpacing: "1px",
-    textShadow: "0 2px 0 rgba(0,0,0,0.40)",
+    textShadow: "none",
   },
 
   bank3177Kicker: {
@@ -4538,7 +4536,7 @@ const styles = {
     fontWeight: "950",
     letterSpacing: "1.1px",
     textTransform: "uppercase",
-    textShadow: "0 0 10px rgba(34,211,238,0.34)",
+    textShadow: "none",
   },
 
   financeNavCenter: {
@@ -4598,7 +4596,7 @@ const styles = {
 
   blankAccountTitle: {
     color: "#0f172a",
-    fontSize: "28px",
+    fontSize: "13px",
     fontWeight: "950",
     marginBottom: "10px",
   },
@@ -4767,7 +4765,7 @@ const styles = {
     letterSpacing: "0.5px",
     marginBottom: "8px",
     color: "#f8fafc",
-    textShadow: "0 2px 0 #000",
+    textShadow: "none",
   },
 
   loginSubtitle: {
@@ -4855,10 +4853,10 @@ const styles = {
 
   title: {
     margin: 0,
-    fontSize: "32px",
+    fontSize: "13px",
     letterSpacing: "4px",
     color: "#f8fafc",
-    textShadow: "0 0 20px rgba(56,189,248,0.25), 0 2px 0 #000",
+    textShadow: "none",
     lineHeight: 1.05,
     whiteSpace: "nowrap",
   },
@@ -5045,16 +5043,16 @@ const styles = {
     color: "#67e8f9",
     fontSize: "12px",
     fontWeight: "900",
-    letterSpacing: "2px",
+    letterSpacing: "0.6px",
     textTransform: "uppercase",
     marginBottom: "6px",
   },
 
   guideTitle: {
-    fontSize: "28px",
+    fontSize: "13px",
     fontWeight: "900",
     letterSpacing: "0.6px",
-    textShadow: "0 2px 0 #000",
+    textShadow: "none",
   },
 
   guideClose: {
@@ -5162,45 +5160,21 @@ const styles = {
 
   calendarPanel: {width: "760px", maxWidth: "94vw", padding: "22px", borderRadius: "24px", background: "linear-gradient(180deg, rgba(8,22,40,0.98), rgba(3,7,18,0.98))", border: "1px solid rgba(56,189,248,0.32)", boxShadow: "0 25px 80px rgba(0,0,0,0.65), 0 0 40px rgba(56,189,248,0.14), inset 0 1px 0 rgba(255,255,255,0.08)", color: "#f8fafc"},
 
-  calendarHeader: {display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px"},
-
-  calendarKicker: {color: "#67e8f9", fontSize: "12px", fontWeight: "950", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "5px"},
-
-  calendarClose: {width: "34px", height: "34px", borderRadius: "10px", border: "1px solid rgba(148,163,184,0.22)", background: "rgba(15,23,42,0.85)", color: "#e2e8f0", cursor: "pointer", fontSize: "22px"},
-
-  calendarActions: {display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", marginBottom: "14px"},
-
-  calendarNavButton: {padding: "10px 12px", borderRadius: "12px", border: "1px solid rgba(56,189,248,0.30)", background: "linear-gradient(180deg, #0ea5e9, #075985)", color: "#fff", fontWeight: "900", cursor: "pointer"},
-
-  calendarWeekBadge: {padding: "10px 14px", borderRadius: "14px", background: "linear-gradient(180deg, rgba(239,68,68,0.95), rgba(153,27,27,0.95))", border: "1px solid rgba(248,113,113,0.45)", color: "#fff", fontWeight: "900", boxShadow: "0 0 16px rgba(239,68,68,0.25)"},
-
-  calendarDaysHeader: {display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px", marginBottom: "6px", color: "#93c5fd", fontWeight: "950", fontSize: "12px", textAlign: "center", textTransform: "uppercase"},
-
-  calendarGrid: {display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px"},
-
-  calendarDay: {height: "64px", borderRadius: "14px", border: "1px solid rgba(148,163,184,0.14)", background: "linear-gradient(180deg, rgba(15,23,42,0.88), rgba(8,22,40,0.88))", color: "#f8fafc", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-    textAlign: "center", gap: "5px", fontWeight: "900", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)"},
-
-  calendarToday: {border: "1px solid rgba(250,204,21,0.78)", background: "linear-gradient(180deg, rgba(250,204,21,0.95), rgba(184,134,11,0.95))", color: "#111827", boxShadow: "0 0 20px rgba(250,204,21,0.28)"},
-
-  calendarEmptyDay: {opacity: 0.25, cursor: "default", background: "rgba(15,23,42,0.25)"},
-
-  calendarDayNumber: {fontSize: "18px"},
-
-  calendarWeekSmall: {fontSize: "11px", opacity: 0.78},
-
-  calendarFooter: {marginTop: "14px", padding: "11px", borderRadius: "14px", background: "rgba(56,189,248,0.08)", border: "1px solid rgba(56,189,248,0.16)", color: "#cbd5e1", fontSize: "13px", fontWeight: "800", textAlign: "center"},
-
-  modalOverlay: {
-    position: "fixed",
-    inset: 0,
-    zIndex: 10000,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+  calendarHeader: {
+    background: "#020617",
+    color: "#ffffff",
+    fontWeight: "950",
+    fontSize: "13px",
+    letterSpacing: "0.6px",
+    textTransform: "uppercase",
     textAlign: "center",
-    background: "rgba(2, 6, 23, 0.72)",
-    backdropFilter: "blur(10px)",
+    padding: "8px 10px",
+    borderLeft: "1px solid rgba(148,163,184,0.45)",
+    borderRight: "1px solid rgba(148,163,184,0.45)",
+    borderBottom: "1px solid rgba(148,163,184,0.45)",
+    textShadow: "none",
+    whiteSpace: "nowrap",
+    verticalAlign: "middle",
   },
 
   resetModal: {
@@ -5240,16 +5214,16 @@ const styles = {
     color: "#67e8f9",
     fontSize: "12px",
     fontWeight: "900",
-    letterSpacing: "2px",
+    letterSpacing: "0.6px",
     textTransform: "uppercase",
     marginBottom: "5px",
   },
 
   modalTitle: {
-    fontSize: "24px",
+    fontSize: "13px",
     fontWeight: "900",
     letterSpacing: "0.5px",
-    textShadow: "0 2px 0 #000",
+    textShadow: "none",
   },
 
   modalClose: {
@@ -5469,7 +5443,7 @@ const styles = {
   tmTitle: {
     color: "#67e8f9",
     fontWeight: "900",
-    letterSpacing: "1.2px",
+    letterSpacing: "0.6px",
     textTransform: "uppercase",
     fontSize: "15px",
   },
@@ -5650,18 +5624,18 @@ const styles = {
 
   depense: {
     color: "#ff4d4d",
-    fontSize: "26px",
+    fontSize: "13px",
     fontWeight: "bold",
   },
 
   revenu: {
     color: "#00ff9f",
-    fontSize: "26px",
+    fontSize: "13px",
     fontWeight: "bold",
   },
 
   solde: {
-    fontSize: "28px",
+    fontSize: "13px",
     fontWeight: "bold",
   },
 
@@ -6150,7 +6124,7 @@ const styles = {
     color: "#f0f9ff",
     fontSize: "13px",
     fontWeight: "950",
-    letterSpacing: "0.2px",
+    letterSpacing: "0.6px",
     cursor: "pointer",
     display: "inline-flex",
     alignItems: "center",
@@ -6359,20 +6333,21 @@ const styles = {
     boxShadow: "2px 0 0 rgba(15,23,42,0.20)",
   },
 
-  calendarTitle: {fontSize: "28px", fontWeight: "950", textTransform: "capitalize", textShadow: "0 2px 0 #000"},
-
-  weekHeader: {
-    position: "sticky",
-    top: 29,
-    background: "#ffffff",
-    borderRight: "1px solid #000",
-    borderBottom: "1px solid #000",
-    width: "30px",
-    minWidth: "30px",
-    height: "22px",
-    fontSize: "10px",
+  calendarTitle: {
+    background: "#020617",
+    color: "#ffffff",
+    fontWeight: "950",
+    fontSize: "13px",
+    letterSpacing: "0.6px",
+    textTransform: "uppercase",
     textAlign: "center",
-    zIndex: 18,
+    padding: "8px 10px",
+    borderLeft: "1px solid rgba(148,163,184,0.45)",
+    borderRight: "1px solid rgba(148,163,184,0.45)",
+    borderBottom: "1px solid rgba(148,163,184,0.45)",
+    textShadow: "none",
+    whiteSpace: "nowrap",
+    verticalAlign: "middle",
   },
 
   blocRow: {
@@ -6381,7 +6356,7 @@ const styles = {
     fontWeight: "800",
     fontSize: "13px",
     textAlign: "center",
-    letterSpacing: "0.2px",
+    letterSpacing: "0.6px",
     borderTop: "1px solid #93c5fd",
     borderBottom: "1px solid #93c5fd",
   },
@@ -6516,7 +6491,7 @@ const styles = {
     background: "linear-gradient(135deg, #0f172a, #111827)",
     borderTop: "1px solid rgba(148,163,184,0.18)",
     fontWeight: "bold",
-    letterSpacing: "0.2px",
+    letterSpacing: "0.6px",
   },
 
   ultraNav: {
@@ -6615,12 +6590,12 @@ const styles = {
   },
 
   passwordModalTitle: {
-    fontSize: "24px",
+    fontSize: "13px",
     fontWeight: "900",
     letterSpacing: "0.8px",
     marginBottom: "6px",
     color: "#ffffff",
-    textShadow: "0 2px 0 rgba(0,0,0,0.55)",
+    textShadow: "none",
   },
 
   passwordModalSubtitle: {
@@ -6697,7 +6672,7 @@ const styles = {
 
   incomePageTitle: {
     textAlign: "center",
-    fontSize: "34px",
+    fontSize: "13px",
     fontWeight: "950",
     letterSpacing: "0.6px",
     padding: "8px 0 12px",
@@ -6739,7 +6714,7 @@ const styles = {
     background: "#000000",
     color: "#ffffff",
     border: "1px solid #000000",
-    fontSize: "24px",
+    fontSize: "13px",
     fontWeight: "950",
     padding: "6px",
     textAlign: "center",
@@ -6827,12 +6802,12 @@ const styles = {
     background: "linear-gradient(145deg, rgba(15,23,42,0.96), rgba(8,47,73,0.72))",
     border: "1px solid rgba(125,211,252,0.38)",
     color: "#ffffff",
-    fontSize: "30px",
+    fontSize: "13px",
     fontWeight: "950",
-    letterSpacing: "2px",
+    letterSpacing: "0.6px",
     textTransform: "uppercase",
     boxShadow: "0 0 30px rgba(14,165,233,0.18)",
-    textShadow: "0 2px 0 rgba(0,0,0,0.65)",
+    textShadow: "none",
   },
 
   incomeBankToolbar: {
@@ -6998,16 +6973,16 @@ const styles = {
     color: "#22d3ee",
     fontSize: "12px",
     fontWeight: "950",
-    letterSpacing: "2px",
+    letterSpacing: "0.6px",
     textTransform: "uppercase",
   },
 
   incomeMirrorTitle: {
     marginTop: "4px",
-    fontSize: "26px",
+    fontSize: "13px",
     fontWeight: "950",
     color: "#ffffff",
-    textShadow: "0 2px 0 rgba(0,0,0,0.65)",
+    textShadow: "none",
   },
 
   incomeMirrorNote: {
@@ -7171,16 +7146,16 @@ const styles = {
     color: "#22d3ee",
     fontSize: "12px",
     fontWeight: "950",
-    letterSpacing: "2px",
+    letterSpacing: "0.6px",
     textTransform: "uppercase",
   },
 
   standardMirrorTitle: {
     marginTop: "4px",
-    fontSize: "26px",
+    fontSize: "13px",
     fontWeight: "950",
     color: "#ffffff",
-    textShadow: "0 2px 0 rgba(0,0,0,0.65)",
+    textShadow: "none",
   },
 
   standardMirrorNote: {
@@ -8109,6 +8084,23 @@ const styles = {
     fontWeight: "950",
     cursor: "pointer",
     boxShadow: "0 -3px 12px rgba(34,197,94,0.18), inset 0 1px 0 rgba(255,255,255,0.9)",
+  },
+
+  calendrierStandardBar: {
+    background: "#020617",
+    color: "#ffffff",
+    fontWeight: "950",
+    fontSize: "13px",
+    letterSpacing: "0.6px",
+    textTransform: "uppercase",
+    textAlign: "center",
+    padding: "8px 10px",
+    borderLeft: "1px solid rgba(148,163,184,0.45)",
+    borderRight: "1px solid rgba(148,163,184,0.45)",
+    borderBottom: "1px solid rgba(148,163,184,0.45)",
+    textShadow: "none",
+    whiteSpace: "nowrap",
+    verticalAlign: "middle",
   },
 
 };

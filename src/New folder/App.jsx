@@ -402,28 +402,6 @@ export default function App() {
 
 
 
-
-  function styleOngletBas(compte) {
-    const actif = compteActif === compte;
-
-    return {
-      minWidth: "150px",
-      height: "42px",
-      padding: "0 16px",
-      borderRadius: "12px 12px 0 0",
-      border: "1px solid rgba(15,23,42,0.25)",
-      borderBottom: actif ? "3px solid #22c55e" : "2px solid #020617",
-      borderTop: actif ? "4px solid #94a3b8" : "4px solid #64748b",
-      background: actif ? "#f8fafc" : "#dbeafe",
-      color: actif ? "#0f766e" : "#020617",
-      fontWeight: "950",
-      cursor: "pointer",
-      boxShadow: actif
-        ? "0 -3px 12px rgba(34,197,94,0.18), inset 0 1px 0 rgba(255,255,255,0.9)"
-        : "inset 0 1px 0 rgba(255,255,255,0.75)",
-    };
-  }
-
   function changerCompteActif(compte) {
     setCompteActif(compte);
     setDescription("");
@@ -739,7 +717,7 @@ export default function App() {
     if (!table) return;
 
     const updateInfo = () => {
-      const max = Math.max(0, table.scrollWidth - table.clientWidth + 320);
+      const max = Math.max(0, table.scrollWidth - table.clientWidth + 420);
       setScrollInfo({
         left: table.scrollLeft,
         max,
@@ -778,7 +756,7 @@ export default function App() {
 
     // Calcul réel du scroll disponible.
     // Le +220 donne un coussin visuel pour atteindre la dernière semaine complètement.
-    const max = Math.max(0, table.scrollWidth - table.clientWidth + 320);
+    const max = Math.max(0, table.scrollWidth - table.clientWidth + 420);
     if (max <= 0) return;
 
     const nextLeft = Math.max(0, Math.min(left, max));
@@ -803,7 +781,7 @@ export default function App() {
     const table = tableScrollRef.current;
     if (!table) return;
 
-    const max = Math.max(0, table.scrollWidth - table.clientWidth + 320);
+    const max = Math.max(0, table.scrollWidth - table.clientWidth + 420);
 
     if (position === "start") bougerScroll(0);
     if (position === "middle") bougerScroll(max / 2);
@@ -4175,26 +4153,32 @@ const styles = {
   },
 
   transferButton: {
-    minWidth: "58px",
-    height: "28px",
+    width: "68px",
+    minWidth: "68px",
+    height: "30px",
     borderRadius: "9px",
     border: "1px solid #93c5fd",
     background: "#eaf3ff",
     color: "#0f172a",
-    fontWeight: "850",
+    fontWeight: "950",
     fontSize: "16px",
     cursor: "pointer",
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
   },
 
   transferColumnCell: {
-    width: "82px",
-    minWidth: "82px",
+    width: "120px",
+    minWidth: "120px",
+    maxWidth: "120px",
+    boxSizing: "border-box",
+    padding: "0 18px",
     textAlign: "center",
     verticalAlign: "middle",
     background: "#f8fafc",
     borderRight: "1px solid rgba(15,23,42,0.16)",
+    borderLeft: "1px solid rgba(15,23,42,0.16)",
     borderBottom: "1px solid rgba(15,23,42,0.16)",
+    overflow: "visible",
   },
 
   transferHeader: {
@@ -4203,13 +4187,18 @@ const styles = {
     zIndex: 50,
     background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
     color: "#ffffff",
-    fontWeight: "800",
-    fontSize: "12px",
-    padding: "6px",
+    fontWeight: "900",
+    fontSize: "11px",
+    padding: "6px 8px",
     borderRight: "1px solid rgba(15,23,42,0.22)",
+    borderLeft: "1px solid rgba(15,23,42,0.22)",
     textAlign: "center",
     whiteSpace: "nowrap",
-    minWidth: "82px",
+    width: "120px",
+    minWidth: "120px",
+    maxWidth: "120px",
+    boxSizing: "border-box",
+    overflow: "visible",
   },
 
   amountPaleBadge: {
@@ -6318,7 +6307,7 @@ const styles = {
     borderCollapse: "separate",
     borderSpacing: 0,
     tableLayout: "fixed",
-    minWidth: "3200px",
+    minWidth: "3480px",
     color: "#111827",
     fontSize: "12px",
   },
@@ -8090,6 +8079,36 @@ const styles = {
     fontWeight: "950",
     textAlign: "center",
     whiteSpace: "nowrap",
+  },
+
+  ongletBasStandard: {
+    minWidth: "150px",
+    height: "42px",
+    padding: "0 16px",
+    borderRadius: "12px 12px 0 0",
+    border: "1px solid rgba(15,23,42,0.25)",
+    borderTop: "4px solid #64748b",
+    borderBottom: "2px solid #020617",
+    background: "#dbeafe",
+    color: "#020617",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
+  },
+
+  ongletBasStandardActif: {
+    minWidth: "150px",
+    height: "42px",
+    padding: "0 16px",
+    borderRadius: "12px 12px 0 0",
+    border: "1px solid rgba(15,23,42,0.20)",
+    borderTop: "4px solid #94a3b8",
+    borderBottom: "3px solid #22c55e",
+    background: "#f8fafc",
+    color: "#0f766e",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 -3px 12px rgba(34,197,94,0.18), inset 0 1px 0 rgba(255,255,255,0.9)",
   },
 
 };
