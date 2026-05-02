@@ -340,6 +340,9 @@ export default function App() {
   const [revenuMode, setRevenuMode] = useState("semaine");
   const [revenuDate, setRevenuDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [revenuPrecision, setRevenuPrecision] = useState("");
+  const [editRevenuId, setEditRevenuId] = useState(null);
+  const [editRevenuDescription, setEditRevenuDescription] = useState("");
+  const [editRevenuPrecision, setEditRevenuPrecision] = useState("");
 
   const [data, setData] = useState([]);
   const [erreur, setErreur] = useState("");
@@ -1919,6 +1922,20 @@ export default function App() {
 
     const lignesAffichage = revenusLignes;
 
+    const separerDescriptionRevenu = (description = "") => {
+      const parties = String(description || "").split(" - ");
+      return {
+        base: parties[0] || "",
+        precision: parties.slice(1).join(" - ") || "",
+      };
+    };
+
+    const composerDescriptionRevenu = (base, precision) => {
+      const b = String(base || "").trim();
+      const p = String(precision || "").trim();
+      return p ? `${b} - ${p}` : b;
+    };
+
     const calculRevenu = (item) => {
       if (item.__vide) return { semaine: 0, mois: 0, annee: 0 };
 
@@ -1986,6 +2003,32 @@ export default function App() {
       }
 
       await modifierRevenu(item, { montant: v, mode: "semaine" });
+    }
+
+    function demarrerEditionRevenu(item) {
+      const parts = separerDescriptionRevenu(item.description);
+      setEditRevenuId(item.id);
+      setEditRevenuDescription(parts.base);
+      setEditRevenuPrecision(parts.precision);
+    }
+
+    async function confirmerEditionRevenu(item) {
+      const nouvelleDescription = composerDescriptionRevenu(editRevenuDescription, editRevenuPrecision);
+      if (!nouvelleDescription.trim()) {
+        setErreur("La description ne peut pas être vide.");
+        return;
+      }
+
+      await modifierRevenu(item, { description: nouvelleDescription });
+      setEditRevenuId(null);
+      setEditRevenuDescription("");
+      setEditRevenuPrecision("");
+    }
+
+    function annulerEditionRevenu() {
+      setEditRevenuId(null);
+      setEditRevenuDescription("");
+      setEditRevenuPrecision("");
     }
 
     async function supprimerRevenu(item) {
@@ -2077,7 +2120,7 @@ export default function App() {
             </div>
 
             <div style={styles.entreeCleanNote}>
-              Choisis si ton montant est par semaine, par mois ou par année. Les colonnes se calculent automatiquement.
+              Même logique que le compte 3185 : clique sur ✏️ pour modifier la description et la précision, puis ✓ pour confirmer.
             </div>
 
             <div style={styles.entreeCleanScroll}>
@@ -2093,19 +2136,51 @@ export default function App() {
                 </thead>
 
                 <tbody>
+                  {lignesAffichage.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={styles.entreeCleanEmptyCell}>
+                        Aucune entrée d’argent. Ajoute une ligne avec la barre du haut.
+                      </td>
+                    </tr>
+                  )}
+
                   {lignesAffichage.map((item, index) => {
                     const montants = calculRevenu(item);
+                    const enEdition = editRevenuId === item.id;
+                    const parts = separerDescriptionRevenu(item.description);
 
                     return (
                       <tr key={item.id || index}>
                         <td style={styles.entreeCleanDescCell}>
                           <span style={styles.standardMirrorRowNumber}>{index + 1}</span>
-                          <input
-                            defaultValue={item.description || ""}
-                            disabled={item.__vide}
-                            onBlur={(e) => modifierRevenu(item, { description: e.target.value })}
-                            style={styles.entreeCleanDescInput}
-                          />
+
+                          {enEdition ? (
+                            <>
+                              <select
+                                value={editRevenuDescription}
+                                onChange={(e) => setEditRevenuDescription(e.target.value)}
+                                style={styles.entreeCleanEditSelect}
+                              >
+                                {DESCRIPTIONS_REVENUS.map((desc) => (
+                                  <option key={desc} value={desc}>
+                                    {desc}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <input
+                                value={editRevenuPrecision}
+                                onChange={(e) => setEditRevenuPrecision(e.target.value)}
+                                placeholder="Précision"
+                                style={styles.entreeCleanEditPrecision}
+                              />
+                            </>
+                          ) : (
+                            <div style={styles.entreeCleanDescriptionDisplay}>
+                              <strong>{parts.base}</strong>
+                              {parts.precision && <span>{parts.precision}</span>}
+                            </div>
+                          )}
                         </td>
 
                         <td style={styles.entreeCleanInputCell}>
@@ -2137,27 +2212,54 @@ export default function App() {
 
                         <td style={styles.entreeCleanActionCell}>
                           {!item.__vide && (
-                            <button
-                              onClick={() => supprimerRevenu(item)}
-                              type="button"
-                              style={styles.standardMirrorDeleteButton}
-                              title="Supprimer cette entrée"
-                            >
-                              🗑
-                            </button>
+                            <div style={styles.entreeCleanActionGroup}>
+                              {enEdition ? (
+                                <>
+                                  <button
+                                    onClick={() => confirmerEditionRevenu(item)}
+                                    type="button"
+                                    style={styles.entreeCleanConfirmButton}
+                                    title="Confirmer"
+                                  >
+                                    ✓
+                                  </button>
+
+                                  <button
+                                    onClick={annulerEditionRevenu}
+                                    type="button"
+                                    style={styles.entreeCleanCancelButton}
+                                    title="Annuler"
+                                  >
+                                    ×
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => demarrerEditionRevenu(item)}
+                                    type="button"
+                                    style={styles.entreeCleanEditButton}
+                                    title="Modifier cette ligne"
+                                  >
+                                    ✎
+                                  </button>
+
+                                  <button
+                                    onClick={() => supprimerRevenu(item)}
+                                    type="button"
+                                    style={styles.standardMirrorDeleteButton}
+                                    title="Supprimer cette entrée"
+                                  >
+                                    🗑
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           )}
                         </td>
                       </tr>
                     );
                   })}
-
-                  {lignesAffichage.length === 0 && (
-                    <tr>
-                      <td colSpan={5} style={styles.entreeCleanEmptyCell}>
-                        Aucune entrée d’argent. Ajoute une ligne avec la barre du haut.
-                      </td>
-                    </tr>
-                  )}
 
                   <tr>
                     <td style={styles.entreeCleanTotalLabel}>GAINS TOTAL</td>
@@ -7409,6 +7511,84 @@ const styles = {
     fontSize: "14px",
     fontWeight: "850",
     textAlign: "center",
+  },
+
+  entreeCleanEditSelect: {
+    height: "29px",
+    minWidth: "190px",
+    borderRadius: "6px",
+    border: "1px solid #9ca3af",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 6px",
+    outline: "none",
+  },
+
+  entreeCleanEditPrecision: {
+    height: "27px",
+    minWidth: "170px",
+    border: "1px solid #9ca3af",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "800",
+    padding: "0 6px",
+    outline: "none",
+  },
+
+  entreeCleanDescriptionDisplay: {
+    width: "100%",
+    minHeight: "28px",
+    borderRadius: "6px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#020617",
+    padding: "5px 8px",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    overflow: "hidden",
+    whiteSpace: "nowrap",
+  },
+
+  entreeCleanActionGroup: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+  },
+
+  entreeCleanEditButton: {
+    width: "32px",
+    height: "28px",
+    borderRadius: "9px",
+    border: "1px solid #bae6fd",
+    background: "linear-gradient(180deg, #e0f2fe, #bae6fd)",
+    color: "#075985",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
+  entreeCleanConfirmButton: {
+    width: "30px",
+    height: "27px",
+    borderRadius: "6px",
+    border: "1px solid #16a34a",
+    background: "#ffffff",
+    color: "#166534",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
+  entreeCleanCancelButton: {
+    width: "30px",
+    height: "27px",
+    borderRadius: "6px",
+    border: "1px solid #9ca3af",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "950",
+    cursor: "pointer",
   },
 
 };
