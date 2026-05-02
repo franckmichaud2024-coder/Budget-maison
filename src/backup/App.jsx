@@ -7,28 +7,28 @@ export default function App() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
-  // 🔴 Force logout on every reload
+  // 🔴 FORCE LOGOUT À CHAQUE RELOAD
   useEffect(() => {
     supabase.auth.signOut();
-    setSession(null);
   }, []);
 
-  // Listen to auth state
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
     });
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+      }
+    );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      listener.subscription.unsubscribe();
+    };
   }, []);
 
-  const handleLogin = async () => {
+  const login = async () => {
     setError("");
 
     const { error } = await supabase.auth.signInWithPassword({
@@ -36,25 +36,39 @@ export default function App() {
       password,
     });
 
-    if (error) setError(error.message);
+    if (error) {
+      setError(error.message);
+    }
   };
 
-  const handleLogout = async () => {
+  const logout = async () => {
     await supabase.auth.signOut();
     setSession(null);
   };
 
   if (!session) {
     return (
-      <div style={{display:"flex",justifyContent:"center",alignItems:"center",height:"100vh",background:"#020b1a",color:"white"}}>
-        <div style={{padding:30,borderRadius:15,background:"#0b1e3a"}}>
+      <div style={{
+        height: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        background: "#020b1a",
+        color: "white"
+      }}>
+        <div style={{
+          background: "#0b1e3a",
+          padding: 30,
+          borderRadius: 12,
+          width: 300
+        }}>
           <h2>Connexion sécurisée</h2>
 
           <input
             placeholder="Courriel"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            style={{display:"block",marginBottom:10,width:"100%"}}
+            style={{ width: "100%", marginBottom: 10 }}
           />
 
           <input
@@ -62,23 +76,27 @@ export default function App() {
             placeholder="Mot de passe"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            style={{display:"block",marginBottom:10,width:"100%"}}
+            style={{ width: "100%", marginBottom: 10 }}
           />
 
-          <button onClick={handleLogin} style={{width:"100%"}}>
+          <button onClick={login} style={{ width: "100%" }}>
             Se connecter
           </button>
 
-          {error && <p style={{color:"red"}}>{error}</p>}
+          {error && (
+            <p style={{ color: "red", marginTop: 10 }}>
+              {error}
+            </p>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{padding:20}}>
+    <div style={{ padding: 20 }}>
       <h1>Dashboard Budget Maison</h1>
-      <button onClick={handleLogout}>Se déconnecter</button>
+      <button onClick={logout}>Se déconnecter</button>
     </div>
   );
 }
