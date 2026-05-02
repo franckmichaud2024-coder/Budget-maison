@@ -85,6 +85,19 @@ function creerIdSnapshot() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+
+const DESCRIPTIONS_REVENUS = [
+  "DÉPÔT DE PAYE 1",
+  "DÉPÔT DE PAYE 2",
+  "PAIEMENT SOUTIEN ENF.PROV",
+  "PREST.UNIVERS.GARDE ENFANT CANADA",
+  "PRESTATION POUR ENFANT CANADA",
+  "CSST 90%",
+  "MATERNITÉ 70%",
+  "PATERNITÉ 75%",
+  "AUTRE",
+];
+
 const STRUCTURE_BUDGET = {
   MAISON: [
     "Versement sur prêt",
@@ -316,6 +329,7 @@ export default function App() {
 
   const [showRevenuModal, setShowRevenuModal] = useState(false);
   const [revenuDescription, setRevenuDescription] = useState("");
+  const [revenuDescriptionAutre, setRevenuDescriptionAutre] = useState("");
   const [revenuMontant, setRevenuMontant] = useState("");
   const [revenuMode, setRevenuMode] = useState("semaine");
   const [revenuDate, setRevenuDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -1112,8 +1126,13 @@ export default function App() {
 
     const montantNumber = Number(String(revenuMontant).replace(",", "."));
 
-    if (!revenuDescription.trim()) {
-      setErreur("Entre une description pour l'entrée d'argent.");
+    const descriptionRevenuFinale =
+      revenuDescription === "AUTRE"
+        ? revenuDescriptionAutre.trim()
+        : revenuDescription.trim();
+
+    if (!descriptionRevenuFinale) {
+      setErreur("Choisis une description pour l'entrée d'argent.");
       return;
     }
 
@@ -1134,7 +1153,7 @@ export default function App() {
         user_id: getUserId(),
         compte: "Entrée d’argent",
         bloc: "ENTRÉE D'ARGENT",
-        description: revenuDescription.trim(),
+        description: descriptionRevenuFinale,
         montant: montantNumber,
         mode: normaliserMode(revenuMode),
         type: "revenu",
@@ -1152,6 +1171,7 @@ export default function App() {
     }
 
     setRevenuDescription("");
+    setRevenuDescriptionAutre("");
     setRevenuMontant("");
     setRevenuMode("semaine");
     setRevenuDate(new Date().toISOString().slice(0, 10));
@@ -1885,6 +1905,50 @@ export default function App() {
   function renduTableauEntreeArgent() {
     const revenusLignes = data.filter((item) => item.type === "revenu");
 
+    const lignesParDescription = DESCRIPTIONS_REVENUS.filter((desc) => desc !== "AUTRE").map((desc) => {
+      const lignes = revenusLignes.filter(
+        (item) => String(item.description || "").toUpperCase() === desc.toUpperCase()
+      );
+
+      const totalSemaine = lignes.reduce((acc, item) => acc + calculerMontants(item).semaine, 0);
+      const totalMois = lignes.reduce((acc, item) => acc + calculerMontants(item).mois, 0);
+      const totalAnnee = lignes.reduce((acc, item) => acc + calculerMontants(item).annee, 0);
+      const derniereDate = lignes[0]?.date
+        ? new Date(lignes[0].date).toLocaleDateString("fr-CA")
+        : "";
+
+      return {
+        description: desc,
+        lignes,
+        semaine: totalSemaine,
+        mois: totalMois,
+        annee: totalAnnee,
+        date: derniereDate,
+      };
+    });
+
+    const autresLignes = revenusLignes.filter(
+      (item) => !DESCRIPTIONS_REVENUS.some(
+        (desc) => desc !== "AUTRE" && String(item.description || "").toUpperCase() === desc.toUpperCase()
+      )
+    );
+
+    const lignesTableau = [
+      ...lignesParDescription,
+      ...autresLignes.map((item) => {
+        const montants = calculerMontants(item);
+        return {
+          description: item.description,
+          lignes: [item],
+          semaine: montants.semaine,
+          mois: montants.mois,
+          annee: montants.annee,
+          date: item.date ? new Date(item.date).toLocaleDateString("fr-CA") : "",
+          id: item.id,
+        };
+      }),
+    ];
+
     const totalSemaine = revenusLignes.reduce((acc, item) => acc + calculerMontants(item).semaine, 0);
     const totalMois = revenusLignes.reduce((acc, item) => acc + calculerMontants(item).mois, 0);
     const totalAnnee = revenusLignes.reduce((acc, item) => acc + calculerMontants(item).annee, 0);
@@ -1899,6 +1963,11 @@ export default function App() {
             <button
               onClick={() => {
                 setErreur("");
+                setRevenuDescription("");
+                setRevenuDescriptionAutre("");
+                setRevenuMontant("");
+                setRevenuMode("semaine");
+                setRevenuDate(new Date().toISOString().slice(0, 10));
                 setShowRevenuModal(true);
               }}
               style={styles.incomeButton}
@@ -1917,52 +1986,29 @@ export default function App() {
                   <th style={styles.incomeTh}>MOIS</th>
                   <th style={styles.incomeTh}>ANNÉE</th>
                   <th style={styles.incomeTh}>DATE</th>
-                  <th style={styles.incomeTh}>ACTION</th>
                 </tr>
               </thead>
 
               <tbody>
-                {revenusLignes.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} style={styles.incomeEmpty}>
-                      Aucune entrée d’argent. Clique sur “+ Entrée d’argent”.
+                {lignesTableau.map((ligne) => (
+                  <tr key={ligne.description}>
+                    <td style={styles.incomeTdDescription}>{ligne.description}</td>
+                    <td style={ligne.semaine > 0 ? styles.incomeTdMoneyHighlight : styles.incomeTdMoney}>
+                      {formatArgent(ligne.semaine)}
                     </td>
+                    <td style={ligne.mois > 0 ? styles.incomeTdMoneyHighlight : styles.incomeTdMoney}>
+                      {formatArgent(ligne.mois)}
+                    </td>
+                    <td style={styles.incomeTdMoney}>{formatArgent(ligne.annee)}</td>
+                    <td style={styles.incomeTd}>{ligne.date}</td>
                   </tr>
-                ) : (
-                  revenusLignes.map((item) => {
-                    const montants = calculerMontants(item);
-                    const dateTexte = item.date
-                      ? new Date(item.date).toLocaleDateString("fr-CA")
-                      : "";
-
-                    return (
-                      <tr key={item.id}>
-                        <td style={styles.incomeTdDescription}>{item.description}</td>
-                        <td style={styles.incomeTdMoney}>{formatArgent(montants.semaine)}</td>
-                        <td style={styles.incomeTdMoney}>{formatArgent(montants.mois)}</td>
-                        <td style={styles.incomeTdMoney}>{formatArgent(montants.annee)}</td>
-                        <td style={styles.incomeTd}>{dateTexte}</td>
-                        <td style={styles.incomeTdAction}>
-                          <button
-                            onClick={() => supprimerLigne(item)}
-                            style={{ ...styles.deleteButton, opacity: 1, transform: "scale(1)" }}
-                            type="button"
-                            title="Supprimer cette entrée"
-                          >
-                            🗑
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
+                ))}
 
                 <tr>
                   <td style={styles.incomeTotalLabel}>GAINS TOTAL:</td>
                   <td style={styles.incomeTotalMoney}>{formatArgent(totalSemaine)}</td>
                   <td style={styles.incomeTotalMoney}>{formatArgent(totalMois)}</td>
                   <td style={styles.incomeTotalMoney}>{formatArgent(totalAnnee)}</td>
-                  <td style={styles.incomeTotalMoney}></td>
                   <td style={styles.incomeTotalMoney}></td>
                 </tr>
               </tbody>
@@ -2484,14 +2530,29 @@ export default function App() {
             </div>
 
             <label style={styles.loginLabel}>Description</label>
-            <input
-              type="text"
+            <select
               value={revenuDescription}
               onChange={(e) => setRevenuDescription(e.target.value)}
-              placeholder="Ex: Dépôt de paye 1"
               style={styles.loginInput}
               autoFocus
-            />
+            >
+              <option value="">Choisir une entrée d’argent</option>
+              {DESCRIPTIONS_REVENUS.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+
+            {revenuDescription === "AUTRE" && (
+              <input
+                type="text"
+                value={revenuDescriptionAutre}
+                onChange={(e) => setRevenuDescriptionAutre(e.target.value)}
+                placeholder="Écrire la description"
+                style={{ ...styles.loginInput, marginTop: "8px" }}
+              />
+            )}
 
             <label style={styles.loginLabel}>Montant</label>
             <input
@@ -2528,6 +2589,7 @@ export default function App() {
                 onClick={() => {
                   setShowRevenuModal(false);
                   setRevenuDescription("");
+                  setRevenuDescriptionAutre("");
                   setRevenuMontant("");
                   setRevenuMode("semaine");
                   setRevenuDate(new Date().toISOString().slice(0, 10));
