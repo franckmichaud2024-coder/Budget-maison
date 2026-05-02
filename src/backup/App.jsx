@@ -4,12 +4,29 @@ import { supabase } from "./supabase";
 const semaines = Array.from({ length: 52 }, (_, i) => i + 1);
 
 const COMPTES_BUDGET = [
-  "7570 - Procédures",
+  "Entrée d’argent",
   "3185 - Enveloppes",
   "3177 - Argent accumulé",
-  "Entrée d’argent",
+  "7570 - Procédures",
 ];
 
+
+
+function ordonnerComptesBudget(liste = []) {
+  const ordreFixe = COMPTES_BUDGET;
+  const uniques = Array.from(new Set([...(liste || []), ...ordreFixe]));
+
+  return uniques.sort((a, b) => {
+    const ia = ordreFixe.indexOf(a);
+    const ib = ordreFixe.indexOf(b);
+
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+
+    return String(a).localeCompare(String(b), "fr", { sensitivity: "base" });
+  });
+}
 
 const SNAPSHOT_KEY = "budget_maison_snapshots_v1";
 const RESET_PASSWORD = "1234"; // Change ce mot de passe ici
@@ -87,8 +104,7 @@ function creerIdSnapshot() {
 
 
 const DESCRIPTIONS_REVENUS = [
-  "DÉPÔT DE PAYE 1",
-  "DÉPÔT DE PAYE 2",
+  "DÉPÔT DE PAYE ",  
   "PAIEMENT SOUTIEN ENF.PROV",
   "PREST.UNIVERS.GARDE ENFANT CANADA",
   "PRESTATION POUR ENFANT CANADA",
@@ -207,6 +223,12 @@ function formatArgent(val) {
   return `${round2(val).toFixed(2)} $`;
 }
 
+function formatNombreInput(val) {
+  const n = Number(val || 0);
+  if (Number.isNaN(n)) return "0.00";
+  return round2(n).toFixed(2);
+}
+
 function normaliserBloc(valeur) {
   return String(valeur || "")
     .trim()
@@ -310,7 +332,7 @@ export default function App() {
 
   const [blocs] = useState(BLOCS_FIXES);
   const [blocActif, setBlocActif] = useState(BLOCS_FIXES[0]);
-  const [comptesBudget, setComptesBudget] = useState(COMPTES_BUDGET);
+  const [comptesBudget, setComptesBudget] = useState(() => ordonnerComptesBudget(COMPTES_BUDGET));
   const [compteActif, setCompteActif] = useState(COMPTES_BUDGET[0]);
   const [nouveauCompte, setNouveauCompte] = useState("");
   const [dragCompte, setDragCompte] = useState(null);
@@ -333,6 +355,10 @@ export default function App() {
   const [revenuMontant, setRevenuMontant] = useState("");
   const [revenuMode, setRevenuMode] = useState("semaine");
   const [revenuDate, setRevenuDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [revenuPrecision, setRevenuPrecision] = useState("");
+  const [editRevenuId, setEditRevenuId] = useState(null);
+  const [editRevenuDescription, setEditRevenuDescription] = useState("");
+  const [editRevenuPrecision, setEditRevenuPrecision] = useState("");
 
   const [data, setData] = useState([]);
   const [erreur, setErreur] = useState("");
@@ -375,6 +401,28 @@ export default function App() {
   });
 
 
+
+
+  function styleOngletBas(compte) {
+    const actif = compteActif === compte;
+
+    return {
+      minWidth: "150px",
+      height: "42px",
+      padding: "0 16px",
+      borderRadius: "12px 12px 0 0",
+      border: "1px solid rgba(15,23,42,0.25)",
+      borderBottom: actif ? "3px solid #22c55e" : "2px solid #020617",
+      borderTop: actif ? "4px solid #94a3b8" : "4px solid #64748b",
+      background: actif ? "#f8fafc" : "#dbeafe",
+      color: actif ? "#0f766e" : "#020617",
+      fontWeight: "950",
+      cursor: "pointer",
+      boxShadow: actif
+        ? "0 -3px 12px rgba(34,197,94,0.18), inset 0 1px 0 rgba(255,255,255,0.9)"
+        : "inset 0 1px 0 rgba(255,255,255,0.75)",
+    };
+  }
 
   function changerCompteActif(compte) {
     setCompteActif(compte);
@@ -432,7 +480,7 @@ export default function App() {
 
     const ancienCompte = compteActif;
 
-    const nouvelleListe = comptesBudget.map((compte) =>
+    const nouvelleListe = ordonnerComptesBudget(comptesBudget).map((compte) =>
       compte === ancienCompte ? nomFinal : compte
     );
 
@@ -493,23 +541,7 @@ export default function App() {
   }
 
   function couleurCompte(compte) {
-    const couleurs = [
-      "#22c55e",
-      "#0ea5e9",
-      "#f59e0b",
-      "#a855f7",
-      "#ef4444",
-      "#14b8a6",
-      "#84cc16",
-      "#ec4899",
-    ];
-
-    let total = 0;
-    for (let i = 0; i < compte.length; i += 1) {
-      total += compte.charCodeAt(i);
-    }
-
-    return couleurs[total % couleurs.length];
+    return "#64748b";
   }
 
   function numeroCompte(compte) {
@@ -594,7 +626,7 @@ export default function App() {
 
     const ancienneValeur = compteEdition;
 
-    const prochaineListe = comptesBudget.map((c) =>
+    const prochaineListe = ordonnerComptesBudget(comptesBudget).map((c) =>
       c === ancienneValeur ? nouveauNom : c
     );
 
@@ -1126,10 +1158,14 @@ export default function App() {
 
     const montantNumber = Number(String(revenuMontant).replace(",", "."));
 
-    const descriptionRevenuFinale =
+    const descriptionRevenuBase =
       revenuDescription === "AUTRE"
         ? revenuDescriptionAutre.trim()
         : revenuDescription.trim();
+
+    const descriptionRevenuFinale = revenuPrecision.trim()
+      ? `${descriptionRevenuBase} - ${revenuPrecision.trim()}`
+      : descriptionRevenuBase;
 
     if (!descriptionRevenuFinale) {
       setErreur("Choisis une description pour l'entrée d'argent.");
@@ -1173,6 +1209,7 @@ export default function App() {
     setRevenuDescription("");
     setRevenuDescriptionAutre("");
     setRevenuMontant("");
+    setRevenuPrecision("");
     setRevenuMode("semaine");
     setRevenuDate(new Date().toISOString().slice(0, 10));
     setShowRevenuModal(false);
@@ -1904,112 +1941,403 @@ export default function App() {
 
   function renduTableauEntreeArgent() {
     const revenusLignes = data.filter((item) => item.type === "revenu");
+    const lignesAffichage = revenusLignes;
 
-    const lignesParDescription = DESCRIPTIONS_REVENUS.filter((desc) => desc !== "AUTRE").map((desc) => {
-      const lignes = revenusLignes.filter(
-        (item) => String(item.description || "").toUpperCase() === desc.toUpperCase()
-      );
+    const separerDescriptionRevenu = (description = "") => {
+      const parties = String(description || "").split(" - ");
+      return {
+        base: parties[0] || "",
+        precision: parties.slice(1).join(" - ") || "",
+      };
+    };
 
-      const totalSemaine = lignes.reduce((acc, item) => acc + calculerMontants(item).semaine, 0);
-      const totalMois = lignes.reduce((acc, item) => acc + calculerMontants(item).mois, 0);
-      const totalAnnee = lignes.reduce((acc, item) => acc + calculerMontants(item).annee, 0);
-      const derniereDate = lignes[0]?.date
-        ? new Date(lignes[0].date).toLocaleDateString("fr-CA")
-        : "";
+    const composerDescriptionRevenu = (base, precision) => {
+      const b = String(base || "").trim();
+      const p = String(precision || "").trim();
+      return p ? `${b} - ${p}` : b;
+    };
+
+    const calculRevenu = (item) => {
+      const montant = Number(item?.montant || 0);
+      const mode = normaliserMode(item?.mode || "semaine");
+
+      if (mode === "mois") {
+        return {
+          semaine: montant * 12 / 52,
+          mois: montant,
+          annee: montant * 12,
+        };
+      }
+
+      if (mode === "annee") {
+        return {
+          semaine: montant / 52,
+          mois: montant / 12,
+          annee: montant,
+        };
+      }
 
       return {
-        description: desc,
-        lignes,
-        semaine: totalSemaine,
-        mois: totalMois,
-        annee: totalAnnee,
-        date: derniereDate,
+        semaine: montant,
+        mois: montant * 52 / 12,
+        annee: montant * 52,
       };
-    });
+    };
 
-    const autresLignes = revenusLignes.filter(
-      (item) => !DESCRIPTIONS_REVENUS.some(
-        (desc) => desc !== "AUTRE" && String(item.description || "").toUpperCase() === desc.toUpperCase()
-      )
-    );
+    const totalSemaine = lignesAffichage.reduce((acc, item) => acc + calculRevenu(item).semaine, 0);
+    const totalMois = lignesAffichage.reduce((acc, item) => acc + calculRevenu(item).mois, 0);
+    const totalAnnee = lignesAffichage.reduce((acc, item) => acc + calculRevenu(item).annee, 0);
 
-    const lignesTableau = [
-      ...lignesParDescription,
-      ...autresLignes.map((item) => {
-        const montants = calculerMontants(item);
-        return {
-          description: item.description,
-          lignes: [item],
-          semaine: montants.semaine,
-          mois: montants.mois,
-          annee: montants.annee,
-          date: item.date ? new Date(item.date).toLocaleDateString("fr-CA") : "",
-          id: item.id,
-        };
-      }),
-    ];
+    async function sauvegarderRevenu(id, champs) {
+      if (!id) return;
 
-    const totalSemaine = revenusLignes.reduce((acc, item) => acc + calculerMontants(item).semaine, 0);
-    const totalMois = revenusLignes.reduce((acc, item) => acc + calculerMontants(item).mois, 0);
-    const totalAnnee = revenusLignes.reduce((acc, item) => acc + calculerMontants(item).annee, 0);
+      const { error } = await supabase
+        .from("budget_transactions")
+        .update(champs)
+        .eq("id", id)
+        .eq("user_id", getUserId());
+
+      if (error) {
+        setErreur(error.message);
+        await loadData();
+      }
+    }
+
+    function modifierRevenuLocal(item, champs, sauvegarder = true) {
+      if (!item?.id) return;
+
+      setData((prev) =>
+        prev.map((ligne) => (ligne.id === item.id ? { ...ligne, ...champs } : ligne))
+      );
+
+      if (sauvegarder) {
+        sauvegarderRevenu(item.id, champs);
+      }
+    }
+
+    function modifierDepuis(source, item, valeur) {
+      if (!item?.id) return;
+
+      const v = Number(String(valeur).replace(",", "."));
+      if (Number.isNaN(v)) return;
+
+      if (source === "mois") {
+        modifierRevenuLocal(item, { montant: v, mode: "mois" });
+        return;
+      }
+
+      if (source === "annee") {
+        modifierRevenuLocal(item, { montant: v, mode: "annee" });
+        return;
+      }
+
+      modifierRevenuLocal(item, { montant: v, mode: "semaine" });
+    }
+
+    function demarrerEditionRevenu(item) {
+      const parts = separerDescriptionRevenu(item.description);
+      setEditRevenuId(item.id);
+      setEditRevenuDescription(parts.base);
+      setEditRevenuPrecision(parts.precision);
+    }
+
+    function confirmerEditionRevenu(item) {
+      const nouvelleDescription = composerDescriptionRevenu(editRevenuDescription, editRevenuPrecision);
+      if (!nouvelleDescription.trim()) {
+        setErreur("La description ne peut pas être vide.");
+        return;
+      }
+
+      modifierRevenuLocal(item, { description: nouvelleDescription });
+      setEditRevenuId(null);
+      setEditRevenuDescription("");
+      setEditRevenuPrecision("");
+    }
+
+    function annulerEditionRevenu() {
+      setEditRevenuId(null);
+      setEditRevenuDescription("");
+      setEditRevenuPrecision("");
+    }
+
+    async function supprimerRevenu(item) {
+      if (!item?.id) return;
+
+      const ok = window.confirm(`Supprimer l'entrée "${item.description}" ?`);
+      if (!ok) return;
+
+      const { error } = await supabase
+        .from("budget_transactions")
+        .delete()
+        .eq("id", item.id)
+        .eq("user_id", getUserId());
+
+      if (error) {
+        setErreur(error.message);
+        return;
+      }
+
+      await loadData();
+    }
 
     return (
       <div key={compteActif} style={styles.pageSwitchAnimation}>
-        <div style={styles.incomePageShell}>
-          <div style={styles.incomePageTitle}>BUDGET 2024-2025</div>
-          <div style={styles.incomeSectionTitle}>ENTRÉE D'ARGENT</div>
-
-          <div style={styles.incomeToolbar}>
-            <button
-              onClick={() => {
-                setErreur("");
-                setRevenuDescription("");
-                setRevenuDescriptionAutre("");
-                setRevenuMontant("");
-                setRevenuMode("semaine");
-                setRevenuDate(new Date().toISOString().slice(0, 10));
-                setShowRevenuModal(true);
-              }}
-              style={styles.incomeButton}
-              type="button"
+        <div style={styles.entreeUltraShell}>
+          <div style={styles.entreeUltraToolbar}>
+            <select
+              value={revenuDescription}
+              onChange={(e) => setRevenuDescription(e.target.value)}
+              style={styles.entreeUltraSelect}
             >
-              + Entrée d’argent
+              <option value="">Choisir une entrée d’argent</option>
+              {DESCRIPTIONS_REVENUS.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+
+            {revenuDescription === "AUTRE" && (
+              <input
+                value={revenuDescriptionAutre}
+                onChange={(e) => setRevenuDescriptionAutre(e.target.value)}
+                placeholder="Nouvelle description"
+                style={styles.entreeUltraTextInput}
+              />
+            )}
+
+            <input
+              value={revenuPrecision}
+              onChange={(e) => setRevenuPrecision(e.target.value)}
+              placeholder="Précision ex: nom, enfant..."
+              style={styles.entreeUltraTextInput}
+            />
+
+            <input
+              value={revenuMontant}
+              onChange={(e) => setRevenuMontant(e.target.value)}
+              placeholder="Montant"
+              type="number"
+              step="0.01"
+              style={styles.entreeUltraAmountInput}
+            />
+
+            <select
+              value={revenuMode}
+              onChange={(e) => setRevenuMode(e.target.value)}
+              style={styles.entreeUltraModeSelect}
+            >
+              <option value="semaine">Semaine</option>
+              <option value="mois">Mois</option>
+              <option value="annee">Année</option>
+            </select>
+
+            <button
+              onClick={ajouterRevenu}
+              style={styles.entreeUltraAddButton}
+              type="button"
+              disabled={loading}
+            >
+              {loading ? "..." : "+ Ajouter"}
             </button>
           </div>
 
-          <div style={styles.incomeTableWrap}>
-            <table style={styles.incomeTable}>
-              <thead>
-                <tr>
-                  <th style={{ ...styles.incomeTh, ...styles.incomeThDescription }}>DESCRIPTION</th>
-                  <th style={styles.incomeTh}>SEMAINE</th>
-                  <th style={styles.incomeTh}>MOIS</th>
-                  <th style={styles.incomeTh}>ANNÉE</th>
-                  <th style={styles.incomeTh}>DATE</th>
-                </tr>
-              </thead>
+          <div style={styles.entreeUltraPanel}>
+            <div style={styles.entreeUltraHeader}>
+              <div style={styles.standardMirrorKicker}>Compte miroir automatique</div>
+              <div style={styles.standardMirrorTitle}>Entrée d’argent</div>
+            </div>
+
+            <div style={styles.entreeUltraNote}>
+              ULTRA PRO MAX : modifie Semaine, Mois ou Année. Les autres colonnes se recalculent automatiquement et la ligne se sauvegarde.
+            </div>
+
+            <div style={styles.entreeUltraScroll}>
+              <table style={styles.entreeUltraTable}>
+                <colgroup>
+                  <col style={styles.entreeUltraColDescription} />
+                  <col style={styles.entreeUltraColMontant} />
+                  <col style={styles.entreeUltraColMontant} />
+                  <col style={styles.entreeUltraColMontant} />
+                  <col style={styles.entreeUltraColAction} />
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style={styles.entreeUltraTh}>DESCRIPTION</th>
+                    <th style={styles.entreeUltraTh}>SEMAINE</th>
+                    <th style={styles.entreeUltraTh}>MOIS</th>
+                    <th style={styles.entreeUltraTh}>ANNÉE</th>
+                    <th style={styles.entreeUltraTh}>ACTION</th>
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {lignesAffichage.length === 0 && (
+                    <tr>
+                      <td colSpan={5} style={styles.entreeCleanEmptyCell}>
+                        Aucune entrée d’argent. Ajoute une ligne avec la barre du haut.
+                      </td>
+                    </tr>
+                  )}
+
+                  {lignesAffichage.map((item, index) => {
+                    const montants = calculRevenu(item);
+                    const mode = normaliserMode(item.mode || "semaine");
+                    const enEdition = editRevenuId === item.id;
+                    const parts = separerDescriptionRevenu(item.description);
+
+                    return (
+                      <tr key={item.id || index}>
+                        <td style={styles.entreeUltraDescCell}>
+                          <span style={styles.standardMirrorRowNumber}>{index + 1}</span>
+
+                          {enEdition ? (
+                            <>
+                              <select
+                                value={editRevenuDescription}
+                                onChange={(e) => setEditRevenuDescription(e.target.value)}
+                                style={styles.entreeCleanEditSelect}
+                              >
+                                {DESCRIPTIONS_REVENUS.map((desc) => (
+                                  <option key={desc} value={desc}>
+                                    {desc}
+                                  </option>
+                                ))}
+                              </select>
+
+                              <input
+                                value={editRevenuPrecision}
+                                onChange={(e) => setEditRevenuPrecision(e.target.value)}
+                                placeholder="Précision"
+                                style={styles.entreeCleanEditPrecision}
+                              />
+                            </>
+                          ) : (
+                            <div style={styles.entreeCleanDescriptionDisplay}>
+                              <strong>{parts.base}</strong>
+                              {parts.precision && <span>{parts.precision}</span>}
+                            </div>
+                          )}
+                        </td>
+
+                        <td style={mode === "semaine" ? styles.entreeUltraActiveCell : styles.entreeUltraInputCell}>
+                          <input
+                            value={formatNombreInput(montants.semaine)}
+                            disabled={!item.id}
+                            onChange={(e) => modifierDepuis("semaine", item, e.target.value)}
+                            style={styles.entreeUltraAmountCellInput}
+                          />
+                        </td>
+
+                        <td style={mode === "mois" ? styles.entreeUltraActiveCell : styles.entreeUltraInputCell}>
+                          <input
+                            value={formatNombreInput(montants.mois)}
+                            disabled={!item.id}
+                            onChange={(e) => modifierDepuis("mois", item, e.target.value)}
+                            style={styles.entreeUltraAmountCellInput}
+                          />
+                        </td>
+
+                        <td style={mode === "annee" ? styles.entreeUltraActiveCell : styles.entreeUltraInputCell}>
+                          <input
+                            value={formatNombreInput(montants.annee)}
+                            disabled={!item.id}
+                            onChange={(e) => modifierDepuis("annee", item, e.target.value)}
+                            style={styles.entreeUltraAmountCellInput}
+                          />
+                        </td>
+
+                        <td style={styles.entreeUltraActionCell}>
+                          {!!item.id && (
+                            <div style={styles.entreeCleanActionGroup}>
+                              {enEdition ? (
+                                <>
+                                  <button
+                                    onClick={() => confirmerEditionRevenu(item)}
+                                    type="button"
+                                    style={styles.entreeCleanConfirmButton}
+                                    title="Confirmer"
+                                  >
+                                    ✓
+                                  </button>
+
+                                  <button
+                                    onClick={annulerEditionRevenu}
+                                    type="button"
+                                    style={styles.entreeCleanCancelButton}
+                                    title="Annuler"
+                                  >
+                                    ×
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => demarrerEditionRevenu(item)}
+                                    type="button"
+                                    style={styles.entreeCleanEditButton}
+                                    title="Modifier cette ligne"
+                                  >
+                                    ✎
+                                  </button>
+
+                                  <button
+                                    onClick={() => supprimerRevenu(item)}
+                                    type="button"
+                                    style={styles.standardMirrorDeleteButton}
+                                    title="Supprimer cette entrée"
+                                  >
+                                    🗑
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+
+
+                </tbody>
+              </table>
+            </div>
+
+            <table style={styles.entreeUltraFooterTable}>
+              <colgroup>
+                <col style={styles.entreeUltraColDescription} />
+                <col style={styles.entreeUltraColMontant} />
+                <col style={styles.entreeUltraColMontant} />
+                <col style={styles.entreeUltraColMontant} />
+                <col style={styles.entreeUltraColAction} />
+              </colgroup>
 
               <tbody>
-                {lignesTableau.map((ligne) => (
-                  <tr key={ligne.description}>
-                    <td style={styles.incomeTdDescription}>{ligne.description}</td>
-                    <td style={ligne.semaine > 0 ? styles.incomeTdMoneyHighlight : styles.incomeTdMoney}>
-                      {formatArgent(ligne.semaine)}
-                    </td>
-                    <td style={ligne.mois > 0 ? styles.incomeTdMoneyHighlight : styles.incomeTdMoney}>
-                      {formatArgent(ligne.mois)}
-                    </td>
-                    <td style={styles.incomeTdMoney}>{formatArgent(ligne.annee)}</td>
-                    <td style={styles.incomeTd}>{ligne.date}</td>
-                  </tr>
-                ))}
-
                 <tr>
-                  <td style={styles.incomeTotalLabel}>GAINS TOTAL:</td>
-                  <td style={styles.incomeTotalMoney}>{formatArgent(totalSemaine)}</td>
-                  <td style={styles.incomeTotalMoney}>{formatArgent(totalMois)}</td>
-                  <td style={styles.incomeTotalMoney}>{formatArgent(totalAnnee)}</td>
-                  <td style={styles.incomeTotalMoney}></td>
+                  <td style={styles.entreeUltraFooterTd}></td>
+
+                  <td style={styles.entreeUltraFooterTd}>
+                    <div style={styles.entreeUltraFooterBox}>
+                      <span style={styles.entreeUltraFooterBoxLabel}>GAINS SEMAINE</span>
+                      <strong style={styles.entreeUltraFooterBoxValue}>{formatArgent(totalSemaine)}</strong>
+                    </div>
+                  </td>
+
+                  <td style={styles.entreeUltraFooterTd}>
+                    <div style={styles.entreeUltraFooterBox}>
+                      <span style={styles.entreeUltraFooterBoxLabel}>GAINS MOIS</span>
+                      <strong style={styles.entreeUltraFooterBoxValue}>{formatArgent(totalMois)}</strong>
+                    </div>
+                  </td>
+
+                  <td style={styles.entreeUltraFooterTd}>
+                    <div style={styles.entreeUltraFooterBox}>
+                      <span style={styles.entreeUltraFooterBoxLabel}>GAINS ANNÉE</span>
+                      <strong style={styles.entreeUltraFooterBoxValue}>{formatArgent(totalAnnee)}</strong>
+                    </div>
+                  </td>
+
+                  <td style={styles.entreeUltraFooterTd}></td>
                 </tr>
               </tbody>
             </table>
@@ -2039,7 +2367,7 @@ export default function App() {
           </div>
 
           <div style={styles.bank3177TableWrap}>
-            <table style={styles.bank3177Table}>
+            <table style={styles.incomeBankTableBright}>
               <thead>
                 <tr>
                   <th style={{ ...styles.bank3177Th, width: "31%" }}>DESCRIPTION</th>
@@ -2382,7 +2710,7 @@ export default function App() {
           style={styles.accountSelectClean}
           title="Changer de page comme un onglet Excel"
         >
-          {comptesBudget.map((compte) => (
+          {ordonnerComptesBudget(comptesBudget).map((compte) => (
             <option key={compte} value={compte}>
               {compte}
             </option>
@@ -2591,6 +2919,7 @@ export default function App() {
                   setRevenuDescription("");
                   setRevenuDescriptionAutre("");
                   setRevenuMontant("");
+    setRevenuPrecision("");
                   setRevenuMode("semaine");
                   setRevenuDate(new Date().toISOString().slice(0, 10));
                 }}
@@ -3449,7 +3778,7 @@ export default function App() {
         )}
 
         <div style={styles.excelTabsBar}>
-          {comptesBudget.map((compte) => {
+          {ordonnerComptesBudget(comptesBudget).map((compte) => {
             const couleur = couleurCompte(compte);
             const actif = compteActif === compte;
 
@@ -3550,12 +3879,14 @@ const styles = {
   bank3177FooterGains: {
     gridColumn: "2 / 3",
     justifyContent: "center",
+    textAlign: "center",
     justifySelf: "center",
   },
 
   bank3177FooterSolde: {
     gridColumn: "4 / 5",
     justifyContent: "center",
+    textAlign: "center",
     justifySelf: "center",
     transform: "translateX(-18px)",
   },
@@ -3576,7 +3907,7 @@ const styles = {
     fontWeight: "950",
     display: "inline-flex",
     alignItems: "center",
-    justifyContent: "flex-end",
+    justifyContent: "center",
     fontVariantNumeric: "tabular-nums",
     boxShadow: "0 0 20px rgba(34,197,94,0.35), inset 0 1px 0 rgba(255,255,255,0.16)",
   },
@@ -3729,6 +4060,7 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
+    textAlign: "center",
     fontSize: "11px",
     fontWeight: "650",
   },
@@ -3843,7 +4175,7 @@ const styles = {
   },
 
   transferButton: {
-    minWidth: "58px",
+    minWidth: "72px",
     height: "28px",
     borderRadius: "9px",
     border: "1px solid #93c5fd",
@@ -3856,8 +4188,8 @@ const styles = {
   },
 
   transferColumnCell: {
-    width: "82px",
-    minWidth: "82px",
+    width: "120px",
+    minWidth: "120px",
     textAlign: "center",
     verticalAlign: "middle",
     background: "#f8fafc",
@@ -3871,13 +4203,16 @@ const styles = {
     zIndex: 50,
     background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
     color: "#ffffff",
-    fontWeight: "800",
+    fontWeight: "900",
     fontSize: "12px",
-    padding: "6px",
+    padding: "3px 8px",
+    height: "26px",
+    lineHeight: "18px",
     borderRight: "1px solid rgba(15,23,42,0.22)",
     textAlign: "center",
     whiteSpace: "nowrap",
-    minWidth: "82px",
+    minWidth: "120px",
+    width: "120px",
   },
 
   amountPaleBadge: {
@@ -3893,6 +4228,7 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
+    textAlign: "center",
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
     whiteSpace: "nowrap",
   },
@@ -4119,6 +4455,7 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
+    textAlign: "center",
     fontSize: "12px",
     fontWeight: "950",
     boxShadow: "0 0 12px rgba(56,189,248,0.20)",
@@ -4160,6 +4497,7 @@ const styles = {
     width: "100%",
     display: "flex",
     justifyContent: "center",
+    textAlign: "center",
     alignItems: "center",
     marginBottom: "10px",
   },
@@ -4306,6 +4644,7 @@ const styles = {
     display: "flex",
     alignItems: "flex-start",
     justifyContent: "center",
+    textAlign: "center",
     padding: "90px 20px 120px",
   },
 
@@ -4407,6 +4746,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    textAlign: "center",
     fontFamily: "Arial, sans-serif",
     color: "white",
   },
@@ -4621,6 +4961,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    textAlign: "center",
     background: "linear-gradient(180deg, #facc15, #b8860b)",
     boxShadow: "0 0 22px rgba(250,204,21,0.24)",
     fontSize: "25px",
@@ -4638,7 +4979,7 @@ const styles = {
   smartHelpBar: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "flex-end",
+    justifyContent: "center",
     margin: "6px 12px 8px",
     minHeight: "32px",
   },
@@ -4675,6 +5016,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    textAlign: "center",
     background: "rgba(2, 6, 23, 0.68)",
     backdropFilter: "blur(10px)",
   },
@@ -4766,6 +5108,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    textAlign: "center",
     background: "linear-gradient(180deg, #facc15, #b8860b)",
     color: "#111827",
     fontWeight: "900",
@@ -4775,7 +5118,7 @@ const styles = {
   guideFooter: {
     position: "relative",
     display: "flex",
-    justifyContent: "flex-end",
+    justifyContent: "center",
     marginTop: "18px",
   },
 
@@ -4804,6 +5147,7 @@ const styles = {
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
+    textAlign: "center",
   },
 
   weekCalendarLabel: {fontSize: "10px", lineHeight: 1, opacity: 0.9, textTransform: "uppercase", letterSpacing: "0.8px"},
@@ -4820,13 +5164,15 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
+    textAlign: "center",
     fontSize: "11px",
     fontWeight: "900",
     whiteSpace: "nowrap",
     textTransform: "capitalize",
   },
 
-  calendarOverlay: {position: "fixed", inset: 0, zIndex: 10030, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(2, 6, 23, 0.70)", backdropFilter: "blur(10px)"},
+  calendarOverlay: {position: "fixed", inset: 0, zIndex: 10030, display: "flex", alignItems: "center", justifyContent: "center",
+    textAlign: "center", background: "rgba(2, 6, 23, 0.70)", backdropFilter: "blur(10px)"},
 
   calendarPanel: {width: "760px", maxWidth: "94vw", padding: "22px", borderRadius: "24px", background: "linear-gradient(180deg, rgba(8,22,40,0.98), rgba(3,7,18,0.98))", border: "1px solid rgba(56,189,248,0.32)", boxShadow: "0 25px 80px rgba(0,0,0,0.65), 0 0 40px rgba(56,189,248,0.14), inset 0 1px 0 rgba(255,255,255,0.08)", color: "#f8fafc"},
 
@@ -4846,7 +5192,8 @@ const styles = {
 
   calendarGrid: {display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px"},
 
-  calendarDay: {height: "64px", borderRadius: "14px", border: "1px solid rgba(148,163,184,0.14)", background: "linear-gradient(180deg, rgba(15,23,42,0.88), rgba(8,22,40,0.88))", color: "#f8fafc", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "5px", fontWeight: "900", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)"},
+  calendarDay: {height: "64px", borderRadius: "14px", border: "1px solid rgba(148,163,184,0.14)", background: "linear-gradient(180deg, rgba(15,23,42,0.88), rgba(8,22,40,0.88))", color: "#f8fafc", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+    textAlign: "center", gap: "5px", fontWeight: "900", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)"},
 
   calendarToday: {border: "1px solid rgba(250,204,21,0.78)", background: "linear-gradient(180deg, rgba(250,204,21,0.95), rgba(184,134,11,0.95))", color: "#111827", boxShadow: "0 0 20px rgba(250,204,21,0.28)"},
 
@@ -4865,6 +5212,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    textAlign: "center",
     background: "rgba(2, 6, 23, 0.72)",
     backdropFilter: "blur(10px)",
   },
@@ -4971,7 +5319,7 @@ const styles = {
   modalActions: {
     position: "relative",
     display: "flex",
-    justifyContent: "flex-end",
+    justifyContent: "center",
     gap: "10px",
   },
 
@@ -5027,7 +5375,7 @@ const styles = {
   timeMachineBar: {
     display: "flex",
     gap: "10px",
-    justifyContent: "flex-end",
+    justifyContent: "center",
     alignItems: "center",
   },
 
@@ -5047,6 +5395,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    textAlign: "center",
     gap: "8px",
     padding: "0",
     borderRadius: "0",
@@ -5627,7 +5976,7 @@ const styles = {
   headerToolsRow: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "flex-end",
+    justifyContent: "center",
     gap: "7px",
     flexWrap: "wrap",
   },
@@ -5820,6 +6169,7 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
+    textAlign: "center",
     gap: "6px",
     boxShadow: "0 0 18px rgba(56,189,248,0.24), inset 0 1px 0 rgba(255,255,255,0.16)",
   },
@@ -5835,7 +6185,7 @@ const styles = {
   floatingHeaderDock: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "flex-end",
+    justifyContent: "center",
     gap: "10px",
     padding: "8px",
     borderRadius: "18px",
@@ -5887,6 +6237,7 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
+    textAlign: "center",
     gap: "8px",
     height: "38px",
     padding: "0 18px",
@@ -5910,6 +6261,7 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
+    textAlign: "center",
     background: "rgba(255,255,255,0.20)",
     color: "#ffffff",
     fontSize: "13px",
@@ -5981,8 +6333,10 @@ const styles = {
     background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
     color: "#ffffff",
     fontWeight: "800",
-    fontSize: "12px",
-    padding: "6px",
+    fontSize: "11px",
+    padding: "3px 6px",
+    height: "26px",
+    lineHeight: "18px",
     borderRight: "1px solid rgba(15,23,42,0.22)",
     textAlign: "center",
     whiteSpace: "nowrap",
@@ -6021,7 +6375,22 @@ const styles = {
     boxShadow: "2px 0 0 rgba(15,23,42,0.20)",
   },
 
-  calendarTitle: {fontSize: "28px", fontWeight: "950", textTransform: "capitalize", textShadow: "0 2px 0 #000"},
+  calendarTitle: {
+    position: "sticky",
+    top: 0,
+    zIndex: 45,
+    background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
+    color: "#ffffff",
+    fontSize: "11px",
+    fontWeight: "900",
+    textTransform: "uppercase",
+    textShadow: "none",
+    padding: "3px 6px",
+    height: "26px",
+    lineHeight: "18px",
+    borderRight: "1px solid rgba(15,23,42,0.22)",
+    whiteSpace: "nowrap",
+  },
 
   weekHeader: {
     position: "sticky",
@@ -6260,6 +6629,7 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    textAlign: "center",
     background: "rgba(2,6,23,0.72)",
     backdropFilter: "blur(10px)",
   },
@@ -6293,7 +6663,7 @@ const styles = {
 
   passwordModalActions: {
     display: "flex",
-    justifyContent: "flex-end",
+    justifyContent: "center",
     gap: "10px",
     marginTop: "16px",
   },
@@ -6378,7 +6748,7 @@ const styles = {
 
   incomeToolbar: {
     display: "flex",
-    justifyContent: "flex-end",
+    justifyContent: "center",
     padding: "10px 12px",
     background: "#f8fafc",
     borderBottom: "2px solid #000000",
@@ -6472,6 +6842,1274 @@ const styles = {
     fontSize: "18px",
     textAlign: "center",
     background: "#ffffff",
+  },
+
+  incomeBankShell: {
+    width: "calc(100vw - 20px)",
+    margin: "0 auto",
+    color: "#ffffff",
+  },
+
+  incomeBankTitle: {
+    margin: "8px auto 10px",
+    width: "fit-content",
+    padding: "10px 32px",
+    borderRadius: "22px",
+    background: "linear-gradient(145deg, rgba(15,23,42,0.96), rgba(8,47,73,0.72))",
+    border: "1px solid rgba(125,211,252,0.38)",
+    color: "#ffffff",
+    fontSize: "30px",
+    fontWeight: "950",
+    letterSpacing: "2px",
+    textTransform: "uppercase",
+    boxShadow: "0 0 30px rgba(14,165,233,0.18)",
+    textShadow: "0 2px 0 rgba(0,0,0,0.65)",
+  },
+
+  incomeBankToolbar: {
+    minHeight: "54px",
+    margin: "0 24px 8px",
+    padding: "8px",
+    borderRadius: "18px",
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    background: "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(2,6,23,0.96))",
+    border: "1px solid rgba(56,189,248,0.35)",
+    boxShadow: "0 0 22px rgba(14,165,233,0.16), inset 0 1px 0 rgba(255,255,255,0.08)",
+    overflowX: "auto",
+  },
+
+  stepPill: {
+    width: "26px",
+    height: "26px",
+    borderRadius: "999px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    background: "linear-gradient(180deg, #38bdf8, #0369a1)",
+    color: "#ffffff",
+    fontWeight: "950",
+    boxShadow: "0 0 16px rgba(56,189,248,0.45)",
+    flex: "0 0 auto",
+  },
+
+  toolbarLabel: {
+    fontSize: "12px",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    color: "#67e8f9",
+    letterSpacing: "1px",
+    flex: "0 0 auto",
+  },
+
+  incomeSelect: {
+    height: "36px",
+    minWidth: "330px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.55)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  incomeTextInput: {
+    height: "36px",
+    minWidth: "210px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "800",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  incomeAmountInput: {
+    height: "36px",
+    width: "130px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  incomeModeSelect: {
+    height: "36px",
+    width: "135px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  incomeDateInput: {
+    height: "36px",
+    width: "150px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  incomeAddButtonBank: {
+    height: "38px",
+    minWidth: "120px",
+    padding: "0 16px",
+    borderRadius: "13px",
+    border: "1px solid rgba(255,255,255,0.25)",
+    background: "linear-gradient(180deg, #facc15 0%, #ca8a04 100%)",
+    color: "#020617",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 0 18px rgba(250,204,21,0.34), inset 0 1px 0 rgba(255,255,255,0.4)",
+    flex: "0 0 auto",
+  },
+
+  incomeBankShellBright: {
+    width: "calc(100vw - 24px)",
+    margin: "0 auto",
+    color: "#020617",
+  },
+
+  incomeBankTableShellBright: {
+    width: "calc(100vw - 24px)",
+    maxHeight: "430px",
+    margin: "8px auto 0",
+    overflow: "auto",
+    background: "#ffffff",
+    border: "1px solid #b7c8da",
+    boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
+  },
+
+  incomeBankTableBright: {
+    width: "100%",
+    minWidth: "1680px",
+    borderCollapse: "collapse",
+    tableLayout: "auto",
+    background: "#ffffff",
+    color: "#020617",
+    fontFamily: "Arial, sans-serif",
+  },
+
+  incomeMirrorShell: {
+    width: "100%",
+    color: "#020617",
+  },
+
+  incomeMirrorPanel: {
+    width: "calc(100vw - 26px)",
+    margin: "8px auto 0",
+    borderRadius: "18px",
+    overflow: "hidden",
+    border: "1px solid #c7d2fe",
+    background: "#ffffff",
+    boxShadow: "0 24px 80px rgba(0,0,0,0.38)",
+  },
+
+  incomeMirrorTop: {
+    padding: "16px 24px 18px",
+    background: "#111827",
+    color: "#ffffff",
+  },
+
+  incomeMirrorKicker: {
+    color: "#22d3ee",
+    fontSize: "12px",
+    fontWeight: "950",
+    letterSpacing: "2px",
+    textTransform: "uppercase",
+  },
+
+  incomeMirrorTitle: {
+    marginTop: "4px",
+    fontSize: "26px",
+    fontWeight: "950",
+    color: "#ffffff",
+    textShadow: "0 2px 0 rgba(0,0,0,0.65)",
+  },
+
+  incomeMirrorNote: {
+    padding: "10px 24px",
+    background: "#eaf4ff",
+    color: "#020617",
+    fontSize: "12px",
+    fontWeight: "800",
+    borderBottom: "1px solid #cbd5e1",
+  },
+
+  incomeMirrorScroll: {
+    maxHeight: "430px",
+    overflow: "auto",
+    background: "#ffffff",
+  },
+
+  incomeMirrorTable: {
+    width: "100%",
+    minWidth: "1600px",
+    borderCollapse: "collapse",
+    tableLayout: "auto",
+    background: "#ffffff",
+    color: "#020617",
+    fontFamily: "Arial, sans-serif",
+  },
+
+  incomeMirrorTh: {
+    background: "#020617",
+    color: "#ffffff",
+    padding: "8px",
+    border: "1px solid #94a3b8",
+    fontSize: "13px",
+    fontWeight: "950",
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+
+  incomeMirrorSubTh: {
+    background: "#eaf4ff",
+    color: "#020617",
+    padding: "6px",
+    border: "1px solid #cbd5e1",
+    fontSize: "11px",
+    fontWeight: "900",
+    textAlign: "center",
+  },
+
+  incomeMirrorDescCell: {
+    background: "#f8fafc",
+    border: "1px solid #94a3b8",
+    padding: "4px 8px",
+    fontSize: "13px",
+    fontWeight: "800",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+
+  incomeMirrorDescInput: {
+    width: "100%",
+    height: "28px",
+    borderRadius: "6px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 8px",
+    outline: "none",
+  },
+
+  incomeMirrorCell: {
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    padding: "4px",
+    textAlign: "right",
+  },
+
+  incomeMirrorInput: {
+    width: "100%",
+    height: "26px",
+    borderRadius: "7px",
+    border: "1px solid #93c5fd",
+    background: "#f8fbff",
+    color: "#020617",
+    fontWeight: "900",
+    textAlign: "right",
+    padding: "0 8px",
+    outline: "none",
+  },
+
+  incomeMirrorSoldeCell: {
+    background: "#fff7ed",
+    border: "1px solid #cbd5e1",
+    color: "#020617",
+    fontWeight: "950",
+    fontSize: "13px",
+    padding: "6px 10px",
+    textAlign: "right",
+    whiteSpace: "nowrap",
+  },
+
+  incomeMirrorFooter: {
+    minHeight: "72px",
+    background: "#dbeafe",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "24px",
+    padding: "12px 18px",
+    borderTop: "1px solid #93c5fd",
+  },
+
+  incomeMirrorFooterMetric: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+  },
+
+  incomeMirrorFooterLabel: {
+    color: "#020617",
+    fontSize: "12px",
+    fontWeight: "950",
+    letterSpacing: "1px",
+    textTransform: "uppercase",
+  },
+
+  incomeMirrorFooterValue: {
+    minWidth: "150px",
+    height: "40px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0 14px",
+    borderRadius: "12px",
+    background: "#020617",
+    color: "#86efac",
+    fontSize: "18px",
+    fontWeight: "950",
+    boxShadow: "0 0 16px rgba(34,197,94,0.30)",
+  },
+
+  standardMirrorShell: {
+    width: "calc(100vw - 26px)",
+    margin: "0 auto",
+    borderRadius: "18px",
+    overflow: "hidden",
+    border: "1px solid #c7d2fe",
+    background: "#ffffff",
+    color: "#020617",
+    boxShadow: "0 24px 80px rgba(0,0,0,0.38)",
+  },
+
+  standardMirrorHeader: {
+    padding: "16px 24px 18px",
+    background: "#111827",
+    color: "#ffffff",
+  },
+
+  standardMirrorKicker: {
+    color: "#22d3ee",
+    fontSize: "12px",
+    fontWeight: "950",
+    letterSpacing: "2px",
+    textTransform: "uppercase",
+  },
+
+  standardMirrorTitle: {
+    marginTop: "4px",
+    fontSize: "26px",
+    fontWeight: "950",
+    color: "#ffffff",
+    textShadow: "0 2px 0 rgba(0,0,0,0.65)",
+  },
+
+  standardMirrorNote: {
+    padding: "10px 24px",
+    background: "#eaf4ff",
+    color: "#020617",
+    fontSize: "12px",
+    fontWeight: "800",
+    borderBottom: "1px solid #cbd5e1",
+  },
+
+  standardMirrorScroll: {
+    maxHeight: "430px",
+    overflow: "auto",
+    background: "#ffffff",
+  },
+
+  standardMirrorTable: {
+    width: "100%",
+    minWidth: "1650px",
+    borderCollapse: "collapse",
+    tableLayout: "auto",
+    background: "#ffffff",
+    color: "#020617",
+    fontFamily: "Arial, sans-serif",
+  },
+
+  standardMirrorTh: {
+    background: "#020617",
+    color: "#ffffff",
+    padding: "8px",
+    border: "1px solid #94a3b8",
+    fontSize: "13px",
+    fontWeight: "950",
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+
+  standardMirrorSubTh: {
+    background: "#eaf4ff",
+    color: "#020617",
+    padding: "6px",
+    border: "1px solid #cbd5e1",
+    fontSize: "11px",
+    fontWeight: "900",
+    textAlign: "center",
+  },
+
+  standardMirrorDescCell: {
+    background: "#f8fafc",
+    border: "1px solid #94a3b8",
+    padding: "4px 8px",
+    fontSize: "13px",
+    fontWeight: "800",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+
+  standardMirrorRowNumber: {
+    width: "24px",
+    height: "22px",
+    borderRadius: "7px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    background: "#dbeafe",
+    border: "1px solid #93c5fd",
+    color: "#0369a1",
+    fontSize: "12px",
+    fontWeight: "950",
+    flex: "0 0 auto",
+  },
+
+  standardMirrorDescInput: {
+    width: "100%",
+    height: "28px",
+    borderRadius: "6px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 8px",
+    outline: "none",
+  },
+
+  standardMirrorInputCell: {
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    padding: "4px",
+    textAlign: "right",
+  },
+
+  standardMirrorAmountInput: {
+    width: "100%",
+    height: "26px",
+    borderRadius: "7px",
+    border: "1px solid #93c5fd",
+    background: "#f8fbff",
+    color: "#020617",
+    fontWeight: "900",
+    textAlign: "right",
+    padding: "0 8px",
+    outline: "none",
+  },
+
+  standardMirrorSoldeCell: {
+    background: "#fff7ed",
+    border: "1px solid #cbd5e1",
+    color: "#020617",
+    fontWeight: "950",
+    fontSize: "13px",
+    padding: "6px 10px",
+    textAlign: "right",
+    whiteSpace: "nowrap",
+  },
+
+  standardMirrorActionCell: {
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    padding: "4px",
+    textAlign: "center",
+  },
+
+  standardMirrorDeleteButton: {
+    width: "32px",
+    height: "28px",
+    borderRadius: "9px",
+    border: "1px solid rgba(255,255,255,0.25)",
+    background: "linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)",
+    color: "#ffffff",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 0 12px rgba(239,68,68,0.35)",
+  },
+
+  standardMirrorFooter: {
+    minHeight: "72px",
+    background: "#dbeafe",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "24px",
+    padding: "12px 18px",
+    borderTop: "1px solid #93c5fd",
+  },
+
+  standardMirrorFooterMetric: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+  },
+
+  standardMirrorFooterLabel: {
+    color: "#020617",
+    fontSize: "12px",
+    fontWeight: "950",
+    letterSpacing: "1px",
+    textTransform: "uppercase",
+  },
+
+  standardMirrorFooterValue: {
+    minWidth: "150px",
+    height: "40px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0 14px",
+    borderRadius: "12px",
+    background: "#020617",
+    color: "#86efac",
+    fontSize: "18px",
+    fontWeight: "950",
+    boxShadow: "0 0 16px rgba(34,197,94,0.30)",
+  },
+
+  entreeCleanShell: {
+    width: "100%",
+    color: "#020617",
+  },
+
+  entreeCleanToolbar: {
+    minHeight: "56px",
+    margin: "0 12px 10px",
+    padding: "9px",
+    borderRadius: "18px",
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    background: "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(2,6,23,0.96))",
+    border: "1px solid rgba(56,189,248,0.36)",
+    boxShadow: "0 0 24px rgba(14,165,233,0.18), inset 0 1px 0 rgba(255,255,255,0.08)",
+    overflowX: "auto",
+  },
+
+  entreeCleanSelect: {
+    height: "38px",
+    minWidth: "380px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.55)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "900",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  entreeCleanTextInput: {
+    height: "38px",
+    minWidth: "220px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  entreeCleanAmountInput: {
+    height: "38px",
+    width: "135px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "900",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  entreeCleanAddButton: {
+    height: "40px",
+    minWidth: "122px",
+    padding: "0 16px",
+    borderRadius: "13px",
+    border: "1px solid rgba(255,255,255,0.26)",
+    background: "linear-gradient(180deg, #facc15 0%, #ca8a04 100%)",
+    color: "#020617",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 0 18px rgba(250,204,21,0.35), inset 0 1px 0 rgba(255,255,255,0.42)",
+    flex: "0 0 auto",
+  },
+
+  entreeCleanPanel: {
+    width: "calc(100vw - 26px)",
+    margin: "0 auto",
+    borderRadius: "18px",
+    overflow: "hidden",
+    border: "1px solid #c7d2fe",
+    background: "#ffffff",
+    color: "#020617",
+    boxShadow: "0 24px 80px rgba(0,0,0,0.38)",
+  },
+
+  entreeCleanHeader: {
+    padding: "16px 24px 18px",
+    background: "#111827",
+    color: "#ffffff",
+  },
+
+  entreeCleanNote: {
+    padding: "10px 24px",
+    background: "#eaf4ff",
+    color: "#020617",
+    fontSize: "12px",
+    fontWeight: "800",
+    borderBottom: "1px solid #cbd5e1",
+  },
+
+  entreeCleanScroll: {
+    maxHeight: "430px",
+    overflow: "auto",
+    background: "#ffffff",
+  },
+
+  entreeCleanTable: {
+    width: "100%",
+    minWidth: "1050px",
+    borderCollapse: "collapse",
+    tableLayout: "auto",
+    background: "#ffffff",
+    color: "#020617",
+    fontFamily: "Arial, sans-serif",
+  },
+
+  entreeCleanTh: {
+    background: "#020617",
+    color: "#ffffff",
+    padding: "8px",
+    border: "1px solid #94a3b8",
+    fontSize: "13px",
+    fontWeight: "950",
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+
+  entreeCleanDescCell: {
+    background: "#f8fafc",
+    border: "1px solid #94a3b8",
+    padding: "4px 8px",
+    fontSize: "13px",
+    fontWeight: "800",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+
+  entreeCleanDescInput: {
+    width: "100%",
+    height: "28px",
+    borderRadius: "6px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 8px",
+    outline: "none",
+  },
+
+  entreeCleanInputCell: {
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    padding: "4px",
+    textAlign: "right",
+  },
+
+  entreeCleanAmountCellInput: {
+    width: "100%",
+    height: "26px",
+    borderRadius: "7px",
+    border: "1px solid #93c5fd",
+    background: "#f8fbff",
+    color: "#020617",
+    fontWeight: "900",
+    textAlign: "right",
+    padding: "0 8px",
+    outline: "none",
+  },
+
+  entreeCleanSoldeCell: {
+    background: "#fff7ed",
+    border: "1px solid #cbd5e1",
+    color: "#020617",
+    fontWeight: "950",
+    fontSize: "13px",
+    padding: "6px 10px",
+    textAlign: "right",
+    whiteSpace: "nowrap",
+  },
+
+  entreeCleanActionCell: {
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    padding: "4px",
+    textAlign: "center",
+  },
+
+  entreeCleanFooter: {
+    minHeight: "72px",
+    background: "#dbeafe",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "24px",
+    padding: "12px 18px",
+    borderTop: "1px solid #93c5fd",
+  },
+
+  entreeCleanModeSelect: {
+    height: "38px",
+    width: "135px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "900",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  entreeCleanTotalLabel: {
+    background: "#548235",
+    color: "#ffffff",
+    border: "1px solid #020617",
+    padding: "8px",
+    fontSize: "16px",
+    fontWeight: "950",
+    textAlign: "left",
+  },
+
+  entreeCleanTotalMoney: {
+    background: "#548235",
+    color: "#ffffff",
+    border: "1px solid #020617",
+    padding: "8px",
+    fontSize: "16px",
+    fontWeight: "950",
+    textAlign: "right",
+    whiteSpace: "nowrap",
+  },
+
+  entreeCleanEmptyCell: {
+    background: "#f8fafc",
+    color: "#020617",
+    border: "1px solid #cbd5e1",
+    padding: "18px",
+    fontSize: "14px",
+    fontWeight: "850",
+    textAlign: "center",
+  },
+
+  entreeCleanEditSelect: {
+    height: "29px",
+    minWidth: "190px",
+    borderRadius: "6px",
+    border: "1px solid #9ca3af",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 6px",
+    outline: "none",
+  },
+
+  entreeCleanEditPrecision: {
+    height: "27px",
+    minWidth: "170px",
+    border: "1px solid #9ca3af",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "800",
+    padding: "0 6px",
+    outline: "none",
+  },
+
+  entreeCleanDescriptionDisplay: {
+    width: "100%",
+    minHeight: "28px",
+    borderRadius: "6px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#020617",
+    padding: "5px 8px",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
+    overflow: "hidden",
+    whiteSpace: "nowrap",
+  },
+
+  entreeCleanActionGroup: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    gap: "6px",
+  },
+
+  entreeCleanEditButton: {
+    width: "32px",
+    height: "28px",
+    borderRadius: "9px",
+    border: "1px solid #bae6fd",
+    background: "linear-gradient(180deg, #e0f2fe, #bae6fd)",
+    color: "#075985",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
+  entreeCleanConfirmButton: {
+    width: "30px",
+    height: "27px",
+    borderRadius: "6px",
+    border: "1px solid #16a34a",
+    background: "#ffffff",
+    color: "#166534",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
+  entreeCleanCancelButton: {
+    width: "30px",
+    height: "27px",
+    borderRadius: "6px",
+    border: "1px solid #9ca3af",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "950",
+    cursor: "pointer",
+  },
+
+  entreeUltraShell: {
+    width: "100%",
+    color: "#020617",
+  },
+
+  entreeUltraToolbar: {
+    minHeight: "56px",
+    margin: "0 12px 10px",
+    padding: "9px",
+    borderRadius: "18px",
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    background: "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(2,6,23,0.96))",
+    border: "1px solid rgba(56,189,248,0.36)",
+    boxShadow: "0 0 24px rgba(14,165,233,0.18), inset 0 1px 0 rgba(255,255,255,0.08)",
+    overflowX: "auto",
+  },
+
+  entreeUltraSelect: {
+    height: "38px",
+    minWidth: "380px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.55)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "900",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  entreeUltraTextInput: {
+    height: "38px",
+    minWidth: "220px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  entreeUltraAmountInput: {
+    height: "38px",
+    width: "135px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "900",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  entreeUltraModeSelect: {
+    height: "38px",
+    width: "135px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "900",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  entreeUltraAddButton: {
+    height: "40px",
+    minWidth: "122px",
+    padding: "0 16px",
+    borderRadius: "13px",
+    border: "1px solid rgba(255,255,255,0.26)",
+    background: "linear-gradient(180deg, #facc15 0%, #ca8a04 100%)",
+    color: "#020617",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 0 18px rgba(250,204,21,0.35), inset 0 1px 0 rgba(255,255,255,0.42)",
+    flex: "0 0 auto",
+  },
+
+  entreeUltraPanel: {
+    width: "calc(100vw - 26px)",
+    margin: "0 auto",
+    borderRadius: "18px",
+    overflow: "hidden",
+    border: "1px solid #c7d2fe",
+    background: "#ffffff",
+    color: "#020617",
+    boxShadow: "0 24px 80px rgba(0,0,0,0.38)",
+  },
+
+  entreeUltraHeader: {
+    padding: "16px 24px 18px",
+    background: "#111827",
+    color: "#ffffff",
+  },
+
+  entreeUltraNote: {
+    padding: "10px 24px",
+    background: "#eaf4ff",
+    color: "#020617",
+    fontSize: "12px",
+    fontWeight: "800",
+    borderBottom: "1px solid #cbd5e1",
+  },
+
+  entreeUltraScroll: {
+    maxHeight: "430px",
+    overflow: "auto",
+    background: "#ffffff",
+  },
+
+  entreeUltraTable: {
+    width: "100%",
+    minWidth: "1050px",
+    borderCollapse: "collapse",
+    tableLayout: "auto",
+    background: "#ffffff",
+    color: "#020617",
+    fontFamily: "Arial, sans-serif",
+  },
+
+  entreeUltraTh: {
+    background: "#020617",
+    color: "#ffffff",
+    padding: "8px",
+    border: "1px solid #94a3b8",
+    fontSize: "13px",
+    fontWeight: "950",
+    textAlign: "center",
+    textTransform: "uppercase",
+  },
+
+  entreeUltraDescCell: {
+    background: "#f8fafc",
+    border: "1px solid #94a3b8",
+    padding: "4px 8px",
+    fontSize: "13px",
+    fontWeight: "800",
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+  },
+
+  entreeUltraInputCell: {
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    padding: "4px",
+    textAlign: "right",
+  },
+
+  entreeUltraActiveCell: {
+    background: "#ecfdf5",
+    border: "2px solid #22c55e",
+    padding: "3px",
+    textAlign: "right",
+    boxShadow: "inset 0 0 10px rgba(34,197,94,0.16)",
+  },
+
+  entreeUltraAmountCellInput: {
+    width: "100%",
+    height: "26px",
+    borderRadius: "7px",
+    border: "1px solid #93c5fd",
+    background: "#f8fbff",
+    color: "#020617",
+    fontWeight: "900",
+    textAlign: "right",
+    padding: "0 8px",
+    outline: "none",
+  },
+
+  entreeUltraActionCell: {
+    background: "#f8fafc",
+    border: "1px solid #cbd5e1",
+    padding: "4px",
+    textAlign: "center",
+  },
+
+  entreeUltraTotalLabel: {
+    background: "#548235",
+    color: "#ffffff",
+    border: "1px solid #020617",
+    padding: "8px",
+    fontSize: "16px",
+    fontWeight: "950",
+    textAlign: "left",
+  },
+
+  entreeUltraTotalMoney: {
+    background: "#548235",
+    color: "#ffffff",
+    border: "1px solid #020617",
+    padding: "8px",
+    fontSize: "16px",
+    fontWeight: "950",
+    textAlign: "right",
+    whiteSpace: "nowrap",
+  },
+
+  entreeUltraFooterBlue: {
+    minHeight: "72px",
+    background: "#dbeafe",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-around",
+    gap: "24px",
+    padding: "12px 18px",
+    borderTop: "1px solid #93c5fd",
+  },
+
+  entreeUltraFooterMetric: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+  },
+
+  entreeUltraFooterLabel: {
+    color: "#020617",
+    fontSize: "12px",
+    fontWeight: "950",
+    letterSpacing: "1px",
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
+  },
+
+  entreeUltraFooterValue: {
+    minWidth: "150px",
+    height: "40px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0 14px",
+    borderRadius: "12px",
+    background: "#020617",
+    color: "#86efac",
+    fontSize: "18px",
+    fontWeight: "950",
+    boxShadow: "0 0 16px rgba(34,197,94,0.30)",
+  },
+
+  entreeUltraFooterBlueAligned: {
+    minHeight: "72px",
+    background: "#dbeafe",
+    display: "grid",
+    gridTemplateColumns: "44% 14% 14% 14% 8%",
+    alignItems: "center",
+    gap: "6px",
+    padding: "10px 8px",
+    borderTop: "1px solid #93c5fd",
+    boxSizing: "border-box",
+  },
+
+  entreeUltraFooterEmpty: {
+    minHeight: "1px",
+  },
+
+  entreeUltraFooterColumn: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    gap: "8px",
+    minWidth: 0,
+  },
+
+  entreeUltraFooterLabelSmall: {
+    color: "#020617",
+    fontSize: "10px",
+    fontWeight: "950",
+    letterSpacing: "0.6px",
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
+  },
+
+  entreeUltraFooterValueSmall: {
+    minWidth: "112px",
+    height: "34px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0 10px",
+    borderRadius: "11px",
+    background: "#020617",
+    color: "#86efac",
+    fontSize: "16px",
+    fontWeight: "950",
+    boxShadow: "0 0 14px rgba(34,197,94,0.30)",
+    whiteSpace: "nowrap",
+  },
+
+  entreeUltraColDescription: {
+    width: "44%",
+  },
+
+  entreeUltraColMontant: {
+    width: "14%",
+  },
+
+  entreeUltraColAction: {
+    width: "8%",
+  },
+
+  entreeUltraFooterAutoGrid: {
+    minHeight: "72px",
+    background: "#dbeafe",
+    display: "grid",
+    gridTemplateColumns: "44% 14% 14% 14% 8%",
+    alignItems: "center",
+    padding: "10px 8px",
+    borderTop: "1px solid #93c5fd",
+    boxSizing: "border-box",
+  },
+
+  entreeUltraFooterAutoColumn: {
+    minWidth: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    textAlign: "center",
+    gap: "6px",
+    padding: "0 4px",
+    boxSizing: "border-box",
+  },
+
+  entreeUltraFooterValueAuto: {
+    width: "clamp(92px, 72%, 145px)",
+    height: "34px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "0 10px",
+    borderRadius: "11px",
+    background: "#020617",
+    color: "#86efac",
+    fontSize: "clamp(13px, 0.9vw, 16px)",
+    fontWeight: "950",
+    boxShadow: "0 0 14px rgba(34,197,94,0.30)",
+    whiteSpace: "nowrap",
+    boxSizing: "border-box",
+  },
+
+  entreeUltraColDescription: {
+    width: "auto",
+  },
+
+  entreeUltraColMontant: {
+    width: "15%",
+    minWidth: "170px",
+  },
+
+  entreeUltraColAction: {
+    width: "90px",
+  },
+
+  entreeUltraFooterTable: {
+    width: "100%",
+    minWidth: "1050px",
+    tableLayout: "auto",
+    borderCollapse: "collapse",
+    background: "#dbeafe",
+    color: "#020617",
+    fontFamily: "Arial, sans-serif",
+    borderTop: "1px solid #93c5fd",
+  },
+
+  entreeUltraFooterTd: {
+    height: "72px",
+    padding: "10px 8px",
+    textAlign: "center",
+    verticalAlign: "middle",
+    boxSizing: "border-box",
+  },
+
+  entreeUltraFooterBox: {
+    width: "100%",
+    maxWidth: "170px",
+    minWidth: "130px",
+    height: "38px",
+    margin: "0 auto",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+    borderRadius: "12px",
+    background: "#020617",
+    color: "#86efac",
+    boxShadow: "0 0 16px rgba(34,197,94,0.30)",
+    padding: "0 10px",
+    boxSizing: "border-box",
+    whiteSpace: "nowrap",
+  },
+
+  entreeUltraFooterBoxLabel: {
+    color: "#020617",
+    display: "none",
+  },
+
+  entreeUltraFooterBoxValue: {
+    color: "#86efac",
+    fontSize: "16px",
+    fontWeight: "950",
+    textAlign: "center",
+    whiteSpace: "nowrap",
   },
 
 };
