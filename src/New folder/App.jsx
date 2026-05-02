@@ -2132,13 +2132,20 @@ export default function App() {
 
             <div style={styles.entreeUltraScroll}>
               <table style={styles.entreeUltraTable}>
+                <colgroup>
+                  <col style={styles.entreeUltraColDescription} />
+                  <col style={styles.entreeUltraColMontant} />
+                  <col style={styles.entreeUltraColMontant} />
+                  <col style={styles.entreeUltraColMontant} />
+                  <col style={styles.entreeUltraColAction} />
+                </colgroup>
                 <thead>
                   <tr>
-                    <th style={{ ...styles.entreeUltraTh, width: "44%" }}>DESCRIPTION</th>
-                    <th style={{ ...styles.entreeUltraTh, width: "14%" }}>SEMAINE</th>
-                    <th style={{ ...styles.entreeUltraTh, width: "14%" }}>MOIS</th>
-                    <th style={{ ...styles.entreeUltraTh, width: "14%" }}>ANNÉE</th>
-                    <th style={{ ...styles.entreeUltraTh, width: "8%" }}>ACTION</th>
+                    <th style={styles.entreeUltraTh}>DESCRIPTION</th>
+                    <th style={styles.entreeUltraTh}>SEMAINE</th>
+                    <th style={styles.entreeUltraTh}>MOIS</th>
+                    <th style={styles.entreeUltraTh}>ANNÉE</th>
+                    <th style={styles.entreeUltraTh}>ACTION</th>
                   </tr>
                 </thead>
 
@@ -2274,22 +2281,22 @@ export default function App() {
               </table>
             </div>
 
-            <div style={styles.entreeUltraFooterBlueAligned}>
+            <div style={styles.entreeUltraFooterAutoGrid}>
               <div style={styles.entreeUltraFooterEmpty}></div>
 
-              <div style={styles.entreeUltraFooterColumn}>
+              <div style={styles.entreeUltraFooterAutoColumn}>
                 <span style={styles.entreeUltraFooterLabelSmall}>GAINS SEMAINE</span>
-                <strong style={styles.entreeUltraFooterValueSmall}>{formatArgent(totalSemaine)}</strong>
+                <strong style={styles.entreeUltraFooterValueAuto}>{formatArgent(totalSemaine)}</strong>
               </div>
 
-              <div style={styles.entreeUltraFooterColumn}>
+              <div style={styles.entreeUltraFooterAutoColumn}>
                 <span style={styles.entreeUltraFooterLabelSmall}>GAINS MOIS</span>
-                <strong style={styles.entreeUltraFooterValueSmall}>{formatArgent(totalMois)}</strong>
+                <strong style={styles.entreeUltraFooterValueAuto}>{formatArgent(totalMois)}</strong>
               </div>
 
-              <div style={styles.entreeUltraFooterColumn}>
+              <div style={styles.entreeUltraFooterAutoColumn}>
                 <span style={styles.entreeUltraFooterLabelSmall}>GAINS ANNÉE</span>
-                <strong style={styles.entreeUltraFooterValueSmall}>{formatArgent(totalAnnee)}</strong>
+                <strong style={styles.entreeUltraFooterValueAuto}>{formatArgent(totalAnnee)}</strong>
               </div>
 
               <div style={styles.entreeUltraFooterEmpty}></div>
@@ -7860,7 +7867,7 @@ const styles = {
     minHeight: "72px",
     background: "#dbeafe",
     display: "grid",
-    gridTemplateColumns: "52% 12% 12% 12% 12%",
+    gridTemplateColumns: "44% 14% 14% 14% 8%",
     alignItems: "center",
     gap: "6px",
     padding: "10px 8px",
@@ -7903,6 +7910,56 @@ const styles = {
     fontWeight: "950",
     boxShadow: "0 0 14px rgba(34,197,94,0.30)",
     whiteSpace: "nowrap",
+  },
+
+  entreeUltraColDescription: {
+    width: "44%",
+  },
+
+  entreeUltraColMontant: {
+    width: "14%",
+  },
+
+  entreeUltraColAction: {
+    width: "8%",
+  },
+
+  entreeUltraFooterAutoGrid: {
+    minHeight: "72px",
+    background: "#dbeafe",
+    display: "grid",
+    gridTemplateColumns: "44% 14% 14% 14% 8%",
+    alignItems: "center",
+    padding: "10px 8px",
+    borderTop: "1px solid #93c5fd",
+    boxSizing: "border-box",
+  },
+
+  entreeUltraFooterAutoColumn: {
+    minWidth: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "6px",
+    padding: "0 4px",
+    boxSizing: "border-box",
+  },
+
+  entreeUltraFooterValueAuto: {
+    width: "clamp(92px, 72%, 145px)",
+    height: "34px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    padding: "0 10px",
+    borderRadius: "11px",
+    background: "#020617",
+    color: "#86efac",
+    fontSize: "clamp(13px, 0.9vw, 16px)",
+    fontWeight: "950",
+    boxShadow: "0 0 14px rgba(34,197,94,0.30)",
+    whiteSpace: "nowrap",
+    boxSizing: "border-box",
   },
 
 };
