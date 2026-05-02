@@ -2274,21 +2274,25 @@ export default function App() {
               </table>
             </div>
 
-            <div style={styles.entreeUltraFooterBlue}>
-              <div style={styles.entreeUltraFooterMetric}>
-                <span style={styles.entreeUltraFooterLabel}>GAINS SEMAINE</span>
-                <strong style={styles.entreeUltraFooterValue}>{formatArgent(totalSemaine)}</strong>
+            <div style={styles.entreeUltraFooterBlueAligned}>
+              <div style={styles.entreeUltraFooterEmpty}></div>
+
+              <div style={styles.entreeUltraFooterColumn}>
+                <span style={styles.entreeUltraFooterLabelSmall}>GAINS SEMAINE</span>
+                <strong style={styles.entreeUltraFooterValueSmall}>{formatArgent(totalSemaine)}</strong>
               </div>
 
-              <div style={styles.entreeUltraFooterMetric}>
-                <span style={styles.entreeUltraFooterLabel}>GAINS MOIS</span>
-                <strong style={styles.entreeUltraFooterValue}>{formatArgent(totalMois)}</strong>
+              <div style={styles.entreeUltraFooterColumn}>
+                <span style={styles.entreeUltraFooterLabelSmall}>GAINS MOIS</span>
+                <strong style={styles.entreeUltraFooterValueSmall}>{formatArgent(totalMois)}</strong>
               </div>
 
-              <div style={styles.entreeUltraFooterMetric}>
-                <span style={styles.entreeUltraFooterLabel}>GAINS ANNÉE</span>
-                <strong style={styles.entreeUltraFooterValue}>{formatArgent(totalAnnee)}</strong>
+              <div style={styles.entreeUltraFooterColumn}>
+                <span style={styles.entreeUltraFooterLabelSmall}>GAINS ANNÉE</span>
+                <strong style={styles.entreeUltraFooterValueSmall}>{formatArgent(totalAnnee)}</strong>
               </div>
+
+              <div style={styles.entreeUltraFooterEmpty}></div>
             </div>
           </div>
         </div>
@@ -7850,6 +7854,55 @@ const styles = {
     fontSize: "18px",
     fontWeight: "950",
     boxShadow: "0 0 16px rgba(34,197,94,0.30)",
+  },
+
+  entreeUltraFooterBlueAligned: {
+    minHeight: "72px",
+    background: "#dbeafe",
+    display: "grid",
+    gridTemplateColumns: "44% 14% 14% 14% 8%",
+    alignItems: "center",
+    gap: "6px",
+    padding: "10px 8px",
+    borderTop: "1px solid #93c5fd",
+    boxSizing: "border-box",
+  },
+
+  entreeUltraFooterEmpty: {
+    minHeight: "1px",
+  },
+
+  entreeUltraFooterColumn: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: "8px",
+    minWidth: 0,
+  },
+
+  entreeUltraFooterLabelSmall: {
+    color: "#020617",
+    fontSize: "10px",
+    fontWeight: "950",
+    letterSpacing: "0.6px",
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
+  },
+
+  entreeUltraFooterValueSmall: {
+    minWidth: "112px",
+    height: "34px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    padding: "0 10px",
+    borderRadius: "11px",
+    background: "#020617",
+    color: "#86efac",
+    fontSize: "16px",
+    fontWeight: "950",
+    boxShadow: "0 0 14px rgba(34,197,94,0.30)",
+    whiteSpace: "nowrap",
   },
 
 };

@@ -2269,15 +2269,26 @@ export default function App() {
                     );
                   })}
 
-                  <tr>
-                    <td style={styles.entreeUltraTotalLabel}>GAINS TOTAL</td>
-                    <td style={styles.entreeUltraTotalMoney}>{formatArgent(totalSemaine)}</td>
-                    <td style={styles.entreeUltraTotalMoney}>{formatArgent(totalMois)}</td>
-                    <td style={styles.entreeUltraTotalMoney}>{formatArgent(totalAnnee)}</td>
-                    <td style={styles.entreeUltraTotalLabel}></td>
-                  </tr>
+
                 </tbody>
               </table>
+            </div>
+
+            <div style={styles.entreeUltraFooterBlue}>
+              <div style={styles.entreeUltraFooterMetric}>
+                <span style={styles.entreeUltraFooterLabel}>GAINS SEMAINE</span>
+                <strong style={styles.entreeUltraFooterValue}>{formatArgent(totalSemaine)}</strong>
+              </div>
+
+              <div style={styles.entreeUltraFooterMetric}>
+                <span style={styles.entreeUltraFooterLabel}>GAINS MOIS</span>
+                <strong style={styles.entreeUltraFooterValue}>{formatArgent(totalMois)}</strong>
+              </div>
+
+              <div style={styles.entreeUltraFooterMetric}>
+                <span style={styles.entreeUltraFooterLabel}>GAINS ANNÉE</span>
+                <strong style={styles.entreeUltraFooterValue}>{formatArgent(totalAnnee)}</strong>
+              </div>
             </div>
           </div>
         </div>
@@ -7798,6 +7809,47 @@ const styles = {
     fontWeight: "950",
     textAlign: "right",
     whiteSpace: "nowrap",
+  },
+
+  entreeUltraFooterBlue: {
+    minHeight: "72px",
+    background: "#dbeafe",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-around",
+    gap: "24px",
+    padding: "12px 18px",
+    borderTop: "1px solid #93c5fd",
+  },
+
+  entreeUltraFooterMetric: {
+    display: "flex",
+    alignItems: "center",
+    gap: "12px",
+  },
+
+  entreeUltraFooterLabel: {
+    color: "#020617",
+    fontSize: "12px",
+    fontWeight: "950",
+    letterSpacing: "1px",
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
+  },
+
+  entreeUltraFooterValue: {
+    minWidth: "150px",
+    height: "40px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    padding: "0 14px",
+    borderRadius: "12px",
+    background: "#020617",
+    color: "#86efac",
+    fontSize: "18px",
+    fontWeight: "950",
+    boxShadow: "0 0 16px rgba(34,197,94,0.30)",
   },
 
 };
