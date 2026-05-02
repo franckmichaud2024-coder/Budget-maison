@@ -7,6 +7,7 @@ const COMPTES_BUDGET = [
   "7570 - Procédures",
   "3185 - Enveloppes",
   "3177 - Argent accumulé",
+  "Entrée d’argent",
 ];
 
 
@@ -526,6 +527,11 @@ export default function App() {
 
   function compteEstArgentAccumule(compte) {
     return compteEst(compte, "Argent accumulé");
+  }
+
+  function compteEstEntreeArgent(compte) {
+    const valeur = String(compte || "").toLowerCase();
+    return valeur.includes("entrée d’argent") || valeur.includes("entree d'argent");
   }
 
   function trouverCompteParIntitule(intitule) {
@@ -1126,7 +1132,7 @@ export default function App() {
     const { error } = await supabase.from("budget_transactions").insert([
       {
         user_id: getUserId(),
-        compte: compteActif,
+        compte: "Entrée d’argent",
         bloc: "ENTRÉE D'ARGENT",
         description: revenuDescription.trim(),
         montant: montantNumber,
@@ -1873,6 +1879,97 @@ export default function App() {
           textAlign: align,
         }}
       />
+    );
+  }
+
+  function renduTableauEntreeArgent() {
+    const revenusLignes = data.filter((item) => item.type === "revenu");
+
+    const totalSemaine = revenusLignes.reduce((acc, item) => acc + calculerMontants(item).semaine, 0);
+    const totalMois = revenusLignes.reduce((acc, item) => acc + calculerMontants(item).mois, 0);
+    const totalAnnee = revenusLignes.reduce((acc, item) => acc + calculerMontants(item).annee, 0);
+
+    return (
+      <div key={compteActif} style={styles.pageSwitchAnimation}>
+        <div style={styles.incomePageShell}>
+          <div style={styles.incomePageTitle}>BUDGET 2024-2025</div>
+          <div style={styles.incomeSectionTitle}>ENTRÉE D'ARGENT</div>
+
+          <div style={styles.incomeToolbar}>
+            <button
+              onClick={() => {
+                setErreur("");
+                setShowRevenuModal(true);
+              }}
+              style={styles.incomeButton}
+              type="button"
+            >
+              + Entrée d’argent
+            </button>
+          </div>
+
+          <div style={styles.incomeTableWrap}>
+            <table style={styles.incomeTable}>
+              <thead>
+                <tr>
+                  <th style={{ ...styles.incomeTh, ...styles.incomeThDescription }}>DESCRIPTION</th>
+                  <th style={styles.incomeTh}>SEMAINE</th>
+                  <th style={styles.incomeTh}>MOIS</th>
+                  <th style={styles.incomeTh}>ANNÉE</th>
+                  <th style={styles.incomeTh}>DATE</th>
+                  <th style={styles.incomeTh}>ACTION</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {revenusLignes.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} style={styles.incomeEmpty}>
+                      Aucune entrée d’argent. Clique sur “+ Entrée d’argent”.
+                    </td>
+                  </tr>
+                ) : (
+                  revenusLignes.map((item) => {
+                    const montants = calculerMontants(item);
+                    const dateTexte = item.date
+                      ? new Date(item.date).toLocaleDateString("fr-CA")
+                      : "";
+
+                    return (
+                      <tr key={item.id}>
+                        <td style={styles.incomeTdDescription}>{item.description}</td>
+                        <td style={styles.incomeTdMoney}>{formatArgent(montants.semaine)}</td>
+                        <td style={styles.incomeTdMoney}>{formatArgent(montants.mois)}</td>
+                        <td style={styles.incomeTdMoney}>{formatArgent(montants.annee)}</td>
+                        <td style={styles.incomeTd}>{dateTexte}</td>
+                        <td style={styles.incomeTdAction}>
+                          <button
+                            onClick={() => supprimerLigne(item)}
+                            style={{ ...styles.deleteButton, opacity: 1, transform: "scale(1)" }}
+                            type="button"
+                            title="Supprimer cette entrée"
+                          >
+                            🗑
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+
+                <tr>
+                  <td style={styles.incomeTotalLabel}>GAINS TOTAL:</td>
+                  <td style={styles.incomeTotalMoney}>{formatArgent(totalSemaine)}</td>
+                  <td style={styles.incomeTotalMoney}>{formatArgent(totalMois)}</td>
+                  <td style={styles.incomeTotalMoney}>{formatArgent(totalAnnee)}</td>
+                  <td style={styles.incomeTotalMoney}></td>
+                  <td style={styles.incomeTotalMoney}></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -2852,16 +2949,8 @@ export default function App() {
               style={styles.compactEcheanceInput}
             />
 
-            <button
-              onClick={() => {
-                setErreur("");
-                setShowRevenuModal(true);
-              }}
-              style={styles.incomeButton}
-              type="button"
-            >
-              + Entrée d’argent
-            </button>
+            
+
 
             <button onClick={ajouterLigne} style={styles.compactAddButton} disabled={loading}>
               {loading ? "..." : "+ Ajouter"}
@@ -6192,6 +6281,134 @@ const styles = {
     fontWeight: "950",
     cursor: "pointer",
     boxShadow: "0 0 18px rgba(34,197,94,0.30), inset 0 1px 0 rgba(255,255,255,0.25)",
+  },
+,
+
+  incomePageShell: {
+    width: "min(1280px, calc(100vw - 70px))",
+    margin: "10px auto 0",
+    background: "#ffffff",
+    color: "#000000",
+    border: "2px solid #000000",
+    boxShadow: "0 24px 80px rgba(0,0,0,0.35)",
+  },
+
+  incomePageTitle: {
+    textAlign: "center",
+    fontSize: "34px",
+    fontWeight: "950",
+    letterSpacing: "0.6px",
+    padding: "8px 0 12px",
+    borderBottom: "2px solid #000000",
+    background: "#ffffff",
+  },
+
+  incomeSectionTitle: {
+    textAlign: "center",
+    fontSize: "29px",
+    fontWeight: "950",
+    letterSpacing: "0.5px",
+    padding: "6px 0",
+    background: "#c6e0b4",
+    borderBottom: "2px solid #000000",
+  },
+
+  incomeToolbar: {
+    display: "flex",
+    justifyContent: "flex-end",
+    padding: "10px 12px",
+    background: "#f8fafc",
+    borderBottom: "2px solid #000000",
+  },
+
+  incomeTableWrap: {
+    width: "100%",
+    overflowX: "auto",
+  },
+
+  incomeTable: {
+    width: "100%",
+    borderCollapse: "collapse",
+    fontFamily: "Arial, sans-serif",
+    tableLayout: "fixed",
+  },
+
+  incomeTh: {
+    background: "#000000",
+    color: "#ffffff",
+    border: "1px solid #000000",
+    fontSize: "24px",
+    fontWeight: "950",
+    padding: "6px",
+    textAlign: "center",
+  },
+
+  incomeThDescription: {
+    width: "48%",
+    textAlign: "left",
+  },
+
+  incomeTdDescription: {
+    border: "1px solid #000000",
+    padding: "7px",
+    fontSize: "22px",
+    fontWeight: "650",
+    textAlign: "left",
+    background: "#ffffff",
+  },
+
+  incomeTdMoney: {
+    border: "1px solid #000000",
+    padding: "7px",
+    fontSize: "22px",
+    fontWeight: "750",
+    textAlign: "right",
+    background: "#ffffff",
+    whiteSpace: "nowrap",
+  },
+
+  incomeTd: {
+    border: "1px solid #000000",
+    padding: "7px",
+    fontSize: "18px",
+    textAlign: "center",
+    background: "#ffffff",
+  },
+
+  incomeTdAction: {
+    border: "1px solid #000000",
+    padding: "5px",
+    textAlign: "center",
+    background: "#ffffff",
+  },
+
+  incomeTotalLabel: {
+    border: "1px solid #000000",
+    padding: "7px",
+    fontSize: "22px",
+    fontWeight: "950",
+    color: "#ffffff",
+    background: "#548235",
+    textAlign: "left",
+  },
+
+  incomeTotalMoney: {
+    border: "1px solid #000000",
+    padding: "7px",
+    fontSize: "22px",
+    fontWeight: "950",
+    color: "#ffffff",
+    background: "#548235",
+    textAlign: "right",
+    whiteSpace: "nowrap",
+  },
+
+  incomeEmpty: {
+    border: "1px solid #000000",
+    padding: "24px",
+    fontSize: "18px",
+    textAlign: "center",
+    background: "#ffffff",
   },
 
 };
