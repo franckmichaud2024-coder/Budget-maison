@@ -4175,7 +4175,7 @@ const styles = {
   },
 
   transferButton: {
-    minWidth: "58px",
+    minWidth: "72px",
     height: "28px",
     borderRadius: "9px",
     border: "1px solid #93c5fd",
@@ -4188,8 +4188,8 @@ const styles = {
   },
 
   transferColumnCell: {
-    width: "82px",
-    minWidth: "82px",
+    width: "120px",
+    minWidth: "120px",
     textAlign: "center",
     verticalAlign: "middle",
     background: "#f8fafc",
@@ -4203,13 +4203,16 @@ const styles = {
     zIndex: 50,
     background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
     color: "#ffffff",
-    fontWeight: "800",
+    fontWeight: "900",
     fontSize: "12px",
-    padding: "6px",
+    padding: "3px 8px",
+    height: "26px",
+    lineHeight: "18px",
     borderRight: "1px solid rgba(15,23,42,0.22)",
     textAlign: "center",
     whiteSpace: "nowrap",
-    minWidth: "82px",
+    minWidth: "120px",
+    width: "120px",
   },
 
   amountPaleBadge: {
@@ -6330,8 +6333,10 @@ const styles = {
     background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
     color: "#ffffff",
     fontWeight: "800",
-    fontSize: "12px",
-    padding: "6px",
+    fontSize: "11px",
+    padding: "3px 6px",
+    height: "26px",
+    lineHeight: "18px",
     borderRight: "1px solid rgba(15,23,42,0.22)",
     textAlign: "center",
     whiteSpace: "nowrap",
@@ -6370,7 +6375,22 @@ const styles = {
     boxShadow: "2px 0 0 rgba(15,23,42,0.20)",
   },
 
-  calendarTitle: {fontSize: "28px", fontWeight: "950", textTransform: "capitalize", textShadow: "0 2px 0 #000"},
+  calendarTitle: {
+    position: "sticky",
+    top: 0,
+    zIndex: 45,
+    background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
+    color: "#ffffff",
+    fontSize: "11px",
+    fontWeight: "900",
+    textTransform: "uppercase",
+    textShadow: "none",
+    padding: "3px 6px",
+    height: "26px",
+    lineHeight: "18px",
+    borderRight: "1px solid rgba(15,23,42,0.22)",
+    whiteSpace: "nowrap",
+  },
 
   weekHeader: {
     position: "sticky",

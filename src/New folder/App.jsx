@@ -402,6 +402,28 @@ export default function App() {
 
 
 
+
+  function styleOngletBas(compte) {
+    const actif = compteActif === compte;
+
+    return {
+      minWidth: "150px",
+      height: "42px",
+      padding: "0 16px",
+      borderRadius: "12px 12px 0 0",
+      border: "1px solid rgba(15,23,42,0.25)",
+      borderBottom: actif ? "3px solid #22c55e" : "2px solid #020617",
+      borderTop: actif ? "4px solid #94a3b8" : "4px solid #64748b",
+      background: actif ? "#f8fafc" : "#dbeafe",
+      color: actif ? "#0f766e" : "#020617",
+      fontWeight: "950",
+      cursor: "pointer",
+      boxShadow: actif
+        ? "0 -3px 12px rgba(34,197,94,0.18), inset 0 1px 0 rgba(255,255,255,0.9)"
+        : "inset 0 1px 0 rgba(255,255,255,0.75)",
+    };
+  }
+
   function changerCompteActif(compte) {
     setCompteActif(compte);
     setDescription("");
@@ -717,7 +739,7 @@ export default function App() {
     if (!table) return;
 
     const updateInfo = () => {
-      const max = Math.max(0, table.scrollWidth - table.clientWidth + 420);
+      const max = Math.max(0, table.scrollWidth - table.clientWidth + 320);
       setScrollInfo({
         left: table.scrollLeft,
         max,
@@ -756,7 +778,7 @@ export default function App() {
 
     // Calcul réel du scroll disponible.
     // Le +220 donne un coussin visuel pour atteindre la dernière semaine complètement.
-    const max = Math.max(0, table.scrollWidth - table.clientWidth + 420);
+    const max = Math.max(0, table.scrollWidth - table.clientWidth + 320);
     if (max <= 0) return;
 
     const nextLeft = Math.max(0, Math.min(left, max));
@@ -781,7 +803,7 @@ export default function App() {
     const table = tableScrollRef.current;
     if (!table) return;
 
-    const max = Math.max(0, table.scrollWidth - table.clientWidth + 420);
+    const max = Math.max(0, table.scrollWidth - table.clientWidth + 320);
 
     if (position === "start") bougerScroll(0);
     if (position === "middle") bougerScroll(max / 2);
@@ -3350,7 +3372,9 @@ export default function App() {
                 {headerFixe("X", 6)}
                 {headerFixe("ACCUMULÉ", 7)}
                 {headerFixe("ACTION", 8)}
-                <th style={styles.calendrierStandardBar}>CALENDRIER</th>
+                <th style={styles.calendarTitle} colSpan={52}>
+                  CALENDRIER POUR LES SEMAINES
+                </th>
                 <th style={styles.transferHeader}>
                   TRANSFERT
                 </th>
@@ -4111,10 +4135,10 @@ const styles = {
 
   bank3177Title: {
     color: "#ffffff",
-    fontSize: "13px",
+    fontSize: "24px",
     fontWeight: "950",
     letterSpacing: "1px",
-    textShadow: "none",
+    textShadow: "0 2px 0 rgba(0,0,0,0.40)",
   },
 
   bank3177Kicker: {
@@ -4151,32 +4175,26 @@ const styles = {
   },
 
   transferButton: {
-    width: "68px",
-    minWidth: "68px",
-    height: "30px",
+    minWidth: "58px",
+    height: "28px",
     borderRadius: "9px",
     border: "1px solid #93c5fd",
     background: "#eaf3ff",
     color: "#0f172a",
-    fontWeight: "950",
+    fontWeight: "850",
     fontSize: "16px",
     cursor: "pointer",
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
   },
 
   transferColumnCell: {
-    width: "120px",
-    minWidth: "120px",
-    maxWidth: "120px",
-    boxSizing: "border-box",
-    padding: "0 18px",
+    width: "82px",
+    minWidth: "82px",
     textAlign: "center",
     verticalAlign: "middle",
     background: "#f8fafc",
     borderRight: "1px solid rgba(15,23,42,0.16)",
-    borderLeft: "1px solid rgba(15,23,42,0.16)",
     borderBottom: "1px solid rgba(15,23,42,0.16)",
-    overflow: "visible",
   },
 
   transferHeader: {
@@ -4185,18 +4203,13 @@ const styles = {
     zIndex: 50,
     background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
     color: "#ffffff",
-    fontWeight: "900",
-    fontSize: "11px",
-    padding: "6px 8px",
+    fontWeight: "800",
+    fontSize: "12px",
+    padding: "6px",
     borderRight: "1px solid rgba(15,23,42,0.22)",
-    borderLeft: "1px solid rgba(15,23,42,0.22)",
     textAlign: "center",
     whiteSpace: "nowrap",
-    width: "120px",
-    minWidth: "120px",
-    maxWidth: "120px",
-    boxSizing: "border-box",
-    overflow: "visible",
+    minWidth: "82px",
   },
 
   amountPaleBadge: {
@@ -4536,7 +4549,7 @@ const styles = {
     fontWeight: "950",
     letterSpacing: "1.1px",
     textTransform: "uppercase",
-    textShadow: "none",
+    textShadow: "0 0 10px rgba(34,211,238,0.34)",
   },
 
   financeNavCenter: {
@@ -4596,7 +4609,7 @@ const styles = {
 
   blankAccountTitle: {
     color: "#0f172a",
-    fontSize: "13px",
+    fontSize: "28px",
     fontWeight: "950",
     marginBottom: "10px",
   },
@@ -4765,7 +4778,7 @@ const styles = {
     letterSpacing: "0.5px",
     marginBottom: "8px",
     color: "#f8fafc",
-    textShadow: "none",
+    textShadow: "0 2px 0 #000",
   },
 
   loginSubtitle: {
@@ -4853,10 +4866,10 @@ const styles = {
 
   title: {
     margin: 0,
-    fontSize: "13px",
+    fontSize: "32px",
     letterSpacing: "4px",
     color: "#f8fafc",
-    textShadow: "none",
+    textShadow: "0 0 20px rgba(56,189,248,0.25), 0 2px 0 #000",
     lineHeight: 1.05,
     whiteSpace: "nowrap",
   },
@@ -5043,16 +5056,16 @@ const styles = {
     color: "#67e8f9",
     fontSize: "12px",
     fontWeight: "900",
-    letterSpacing: "0.6px",
+    letterSpacing: "2px",
     textTransform: "uppercase",
     marginBottom: "6px",
   },
 
   guideTitle: {
-    fontSize: "13px",
+    fontSize: "28px",
     fontWeight: "900",
     letterSpacing: "0.6px",
-    textShadow: "none",
+    textShadow: "0 2px 0 #000",
   },
 
   guideClose: {
@@ -5160,21 +5173,45 @@ const styles = {
 
   calendarPanel: {width: "760px", maxWidth: "94vw", padding: "22px", borderRadius: "24px", background: "linear-gradient(180deg, rgba(8,22,40,0.98), rgba(3,7,18,0.98))", border: "1px solid rgba(56,189,248,0.32)", boxShadow: "0 25px 80px rgba(0,0,0,0.65), 0 0 40px rgba(56,189,248,0.14), inset 0 1px 0 rgba(255,255,255,0.08)", color: "#f8fafc"},
 
-  calendarHeader: {
-    background: "#020617",
-    color: "#ffffff",
-    fontWeight: "950",
-    fontSize: "13px",
-    letterSpacing: "0.6px",
-    textTransform: "uppercase",
+  calendarHeader: {display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px"},
+
+  calendarKicker: {color: "#67e8f9", fontSize: "12px", fontWeight: "950", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "5px"},
+
+  calendarClose: {width: "34px", height: "34px", borderRadius: "10px", border: "1px solid rgba(148,163,184,0.22)", background: "rgba(15,23,42,0.85)", color: "#e2e8f0", cursor: "pointer", fontSize: "22px"},
+
+  calendarActions: {display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", marginBottom: "14px"},
+
+  calendarNavButton: {padding: "10px 12px", borderRadius: "12px", border: "1px solid rgba(56,189,248,0.30)", background: "linear-gradient(180deg, #0ea5e9, #075985)", color: "#fff", fontWeight: "900", cursor: "pointer"},
+
+  calendarWeekBadge: {padding: "10px 14px", borderRadius: "14px", background: "linear-gradient(180deg, rgba(239,68,68,0.95), rgba(153,27,27,0.95))", border: "1px solid rgba(248,113,113,0.45)", color: "#fff", fontWeight: "900", boxShadow: "0 0 16px rgba(239,68,68,0.25)"},
+
+  calendarDaysHeader: {display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px", marginBottom: "6px", color: "#93c5fd", fontWeight: "950", fontSize: "12px", textAlign: "center", textTransform: "uppercase"},
+
+  calendarGrid: {display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px"},
+
+  calendarDay: {height: "64px", borderRadius: "14px", border: "1px solid rgba(148,163,184,0.14)", background: "linear-gradient(180deg, rgba(15,23,42,0.88), rgba(8,22,40,0.88))", color: "#f8fafc", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+    textAlign: "center", gap: "5px", fontWeight: "900", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)"},
+
+  calendarToday: {border: "1px solid rgba(250,204,21,0.78)", background: "linear-gradient(180deg, rgba(250,204,21,0.95), rgba(184,134,11,0.95))", color: "#111827", boxShadow: "0 0 20px rgba(250,204,21,0.28)"},
+
+  calendarEmptyDay: {opacity: 0.25, cursor: "default", background: "rgba(15,23,42,0.25)"},
+
+  calendarDayNumber: {fontSize: "18px"},
+
+  calendarWeekSmall: {fontSize: "11px", opacity: 0.78},
+
+  calendarFooter: {marginTop: "14px", padding: "11px", borderRadius: "14px", background: "rgba(56,189,248,0.08)", border: "1px solid rgba(56,189,248,0.16)", color: "#cbd5e1", fontSize: "13px", fontWeight: "800", textAlign: "center"},
+
+  modalOverlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: 10000,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
     textAlign: "center",
-    padding: "8px 10px",
-    borderLeft: "1px solid rgba(148,163,184,0.45)",
-    borderRight: "1px solid rgba(148,163,184,0.45)",
-    borderBottom: "1px solid rgba(148,163,184,0.45)",
-    textShadow: "none",
-    whiteSpace: "nowrap",
-    verticalAlign: "middle",
+    background: "rgba(2, 6, 23, 0.72)",
+    backdropFilter: "blur(10px)",
   },
 
   resetModal: {
@@ -5214,16 +5251,16 @@ const styles = {
     color: "#67e8f9",
     fontSize: "12px",
     fontWeight: "900",
-    letterSpacing: "0.6px",
+    letterSpacing: "2px",
     textTransform: "uppercase",
     marginBottom: "5px",
   },
 
   modalTitle: {
-    fontSize: "13px",
+    fontSize: "24px",
     fontWeight: "900",
     letterSpacing: "0.5px",
-    textShadow: "none",
+    textShadow: "0 2px 0 #000",
   },
 
   modalClose: {
@@ -5443,7 +5480,7 @@ const styles = {
   tmTitle: {
     color: "#67e8f9",
     fontWeight: "900",
-    letterSpacing: "0.6px",
+    letterSpacing: "1.2px",
     textTransform: "uppercase",
     fontSize: "15px",
   },
@@ -5624,18 +5661,18 @@ const styles = {
 
   depense: {
     color: "#ff4d4d",
-    fontSize: "13px",
+    fontSize: "26px",
     fontWeight: "bold",
   },
 
   revenu: {
     color: "#00ff9f",
-    fontSize: "13px",
+    fontSize: "26px",
     fontWeight: "bold",
   },
 
   solde: {
-    fontSize: "13px",
+    fontSize: "28px",
     fontWeight: "bold",
   },
 
@@ -6124,7 +6161,7 @@ const styles = {
     color: "#f0f9ff",
     fontSize: "13px",
     fontWeight: "950",
-    letterSpacing: "0.6px",
+    letterSpacing: "0.2px",
     cursor: "pointer",
     display: "inline-flex",
     alignItems: "center",
@@ -6281,7 +6318,7 @@ const styles = {
     borderCollapse: "separate",
     borderSpacing: 0,
     tableLayout: "fixed",
-    minWidth: "3480px",
+    minWidth: "3200px",
     color: "#111827",
     fontSize: "12px",
   },
@@ -6333,21 +6370,20 @@ const styles = {
     boxShadow: "2px 0 0 rgba(15,23,42,0.20)",
   },
 
-  calendarTitle: {
-    background: "#020617",
-    color: "#ffffff",
-    fontWeight: "950",
-    fontSize: "13px",
-    letterSpacing: "0.6px",
-    textTransform: "uppercase",
+  calendarTitle: {fontSize: "28px", fontWeight: "950", textTransform: "capitalize", textShadow: "0 2px 0 #000"},
+
+  weekHeader: {
+    position: "sticky",
+    top: 29,
+    background: "#ffffff",
+    borderRight: "1px solid #000",
+    borderBottom: "1px solid #000",
+    width: "30px",
+    minWidth: "30px",
+    height: "22px",
+    fontSize: "10px",
     textAlign: "center",
-    padding: "8px 10px",
-    borderLeft: "1px solid rgba(148,163,184,0.45)",
-    borderRight: "1px solid rgba(148,163,184,0.45)",
-    borderBottom: "1px solid rgba(148,163,184,0.45)",
-    textShadow: "none",
-    whiteSpace: "nowrap",
-    verticalAlign: "middle",
+    zIndex: 18,
   },
 
   blocRow: {
@@ -6356,7 +6392,7 @@ const styles = {
     fontWeight: "800",
     fontSize: "13px",
     textAlign: "center",
-    letterSpacing: "0.6px",
+    letterSpacing: "0.2px",
     borderTop: "1px solid #93c5fd",
     borderBottom: "1px solid #93c5fd",
   },
@@ -6491,7 +6527,7 @@ const styles = {
     background: "linear-gradient(135deg, #0f172a, #111827)",
     borderTop: "1px solid rgba(148,163,184,0.18)",
     fontWeight: "bold",
-    letterSpacing: "0.6px",
+    letterSpacing: "0.2px",
   },
 
   ultraNav: {
@@ -6590,12 +6626,12 @@ const styles = {
   },
 
   passwordModalTitle: {
-    fontSize: "13px",
+    fontSize: "24px",
     fontWeight: "900",
     letterSpacing: "0.8px",
     marginBottom: "6px",
     color: "#ffffff",
-    textShadow: "none",
+    textShadow: "0 2px 0 rgba(0,0,0,0.55)",
   },
 
   passwordModalSubtitle: {
@@ -6672,7 +6708,7 @@ const styles = {
 
   incomePageTitle: {
     textAlign: "center",
-    fontSize: "13px",
+    fontSize: "34px",
     fontWeight: "950",
     letterSpacing: "0.6px",
     padding: "8px 0 12px",
@@ -6714,7 +6750,7 @@ const styles = {
     background: "#000000",
     color: "#ffffff",
     border: "1px solid #000000",
-    fontSize: "13px",
+    fontSize: "24px",
     fontWeight: "950",
     padding: "6px",
     textAlign: "center",
@@ -6802,12 +6838,12 @@ const styles = {
     background: "linear-gradient(145deg, rgba(15,23,42,0.96), rgba(8,47,73,0.72))",
     border: "1px solid rgba(125,211,252,0.38)",
     color: "#ffffff",
-    fontSize: "13px",
+    fontSize: "30px",
     fontWeight: "950",
-    letterSpacing: "0.6px",
+    letterSpacing: "2px",
     textTransform: "uppercase",
     boxShadow: "0 0 30px rgba(14,165,233,0.18)",
-    textShadow: "none",
+    textShadow: "0 2px 0 rgba(0,0,0,0.65)",
   },
 
   incomeBankToolbar: {
@@ -6973,16 +7009,16 @@ const styles = {
     color: "#22d3ee",
     fontSize: "12px",
     fontWeight: "950",
-    letterSpacing: "0.6px",
+    letterSpacing: "2px",
     textTransform: "uppercase",
   },
 
   incomeMirrorTitle: {
     marginTop: "4px",
-    fontSize: "13px",
+    fontSize: "26px",
     fontWeight: "950",
     color: "#ffffff",
-    textShadow: "none",
+    textShadow: "0 2px 0 rgba(0,0,0,0.65)",
   },
 
   incomeMirrorNote: {
@@ -7146,16 +7182,16 @@ const styles = {
     color: "#22d3ee",
     fontSize: "12px",
     fontWeight: "950",
-    letterSpacing: "0.6px",
+    letterSpacing: "2px",
     textTransform: "uppercase",
   },
 
   standardMirrorTitle: {
     marginTop: "4px",
-    fontSize: "13px",
+    fontSize: "26px",
     fontWeight: "950",
     color: "#ffffff",
-    textShadow: "none",
+    textShadow: "0 2px 0 rgba(0,0,0,0.65)",
   },
 
   standardMirrorNote: {
@@ -8054,53 +8090,6 @@ const styles = {
     fontWeight: "950",
     textAlign: "center",
     whiteSpace: "nowrap",
-  },
-
-  ongletBasStandard: {
-    minWidth: "150px",
-    height: "42px",
-    padding: "0 16px",
-    borderRadius: "12px 12px 0 0",
-    border: "1px solid rgba(15,23,42,0.25)",
-    borderTop: "4px solid #64748b",
-    borderBottom: "2px solid #020617",
-    background: "#dbeafe",
-    color: "#020617",
-    fontWeight: "950",
-    cursor: "pointer",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
-  },
-
-  ongletBasStandardActif: {
-    minWidth: "150px",
-    height: "42px",
-    padding: "0 16px",
-    borderRadius: "12px 12px 0 0",
-    border: "1px solid rgba(15,23,42,0.20)",
-    borderTop: "4px solid #94a3b8",
-    borderBottom: "3px solid #22c55e",
-    background: "#f8fafc",
-    color: "#0f766e",
-    fontWeight: "950",
-    cursor: "pointer",
-    boxShadow: "0 -3px 12px rgba(34,197,94,0.18), inset 0 1px 0 rgba(255,255,255,0.9)",
-  },
-
-  calendrierStandardBar: {
-    background: "#020617",
-    color: "#ffffff",
-    fontWeight: "950",
-    fontSize: "13px",
-    letterSpacing: "0.6px",
-    textTransform: "uppercase",
-    textAlign: "center",
-    padding: "8px 10px",
-    borderLeft: "1px solid rgba(148,163,184,0.45)",
-    borderRight: "1px solid rgba(148,163,184,0.45)",
-    borderBottom: "1px solid rgba(148,163,184,0.45)",
-    textShadow: "none",
-    whiteSpace: "nowrap",
-    verticalAlign: "middle",
   },
 
 };
