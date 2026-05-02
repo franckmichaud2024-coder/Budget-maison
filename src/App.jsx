@@ -239,18 +239,16 @@ function semainesEnSerie(echeance) {
 }
 
 
-
 function semainesAfficheesPourLigne(item) {
-  const liste = semainesEnSerie(item.echeance);
+  const liste = semainesAfficheesPourLigne(item);
 
-  // Quand le mode est "semaine", on affiche seulement 5 semaines.
-  // Les modes "mois" et "année" gardent les 52 semaines.
   if (normaliserMode(item.mode) === "semaine") {
     return liste.slice(0, 5);
   }
 
   return liste;
 }
+
 
 
 function getWeekNumberISO(date = new Date()) {
@@ -314,6 +312,12 @@ export default function App() {
   const [mode, setMode] = useState("semaine");
   const [echeance, setEcheance] = useState("");
   const [type, setType] = useState("depense");
+
+  const [showRevenuModal, setShowRevenuModal] = useState(false);
+  const [revenuDescription, setRevenuDescription] = useState("");
+  const [revenuMontant, setRevenuMontant] = useState("");
+  const [revenuMode, setRevenuMode] = useState("semaine");
+  const [revenuDate, setRevenuDate] = useState(() => new Date().toISOString().slice(0, 10));
 
   const [data, setData] = useState([]);
   const [erreur, setErreur] = useState("");
@@ -1094,6 +1098,59 @@ export default function App() {
 
   function balance(item) {
     return montantAccumule(item) - calculerMontants(item).annee;
+  }
+
+  async function ajouterRevenu(e) {
+    e.preventDefault();
+    setErreur("");
+
+    const montantNumber = Number(String(revenuMontant).replace(",", "."));
+
+    if (!revenuDescription.trim()) {
+      setErreur("Entre une description pour l'entrée d'argent.");
+      return;
+    }
+
+    if (!revenuMontant || montantNumber <= 0) {
+      setErreur("Entre un montant valide pour l'entrée d'argent.");
+      return;
+    }
+
+    if (!getUserId()) {
+      setErreur("Session Supabase introuvable. Déconnecte-toi puis reconnecte-toi.");
+      return;
+    }
+
+    setLoading(true);
+
+    const { error } = await supabase.from("budget_transactions").insert([
+      {
+        user_id: getUserId(),
+        compte: compteActif,
+        bloc: "ENTRÉE D'ARGENT",
+        description: revenuDescription.trim(),
+        montant: montantNumber,
+        mode: normaliserMode(revenuMode),
+        type: "revenu",
+        echeance: null,
+        semaines_payees: [],
+        date: revenuDate ? new Date(`${revenuDate}T12:00:00`).toISOString() : new Date().toISOString(),
+      },
+    ]);
+
+    setLoading(false);
+
+    if (error) {
+      setErreur(error.message);
+      return;
+    }
+
+    setRevenuDescription("");
+    setRevenuMontant("");
+    setRevenuMode("semaine");
+    setRevenuDate(new Date().toISOString().slice(0, 10));
+    setShowRevenuModal(false);
+    await loadData();
   }
 
   async function ajouterLigne() {
@@ -2321,6 +2378,76 @@ export default function App() {
         </button>
       </div>
 
+      {showRevenuModal && (
+        <div style={styles.passwordModalOverlay}>
+          <form onSubmit={ajouterRevenu} style={styles.revenuModalCard}>
+            <div style={styles.passwordModalTitle}>Entrée d’argent</div>
+            <div style={styles.passwordModalSubtitle}>
+              Ajoute un revenu dans le compte : {compteActif}
+            </div>
+
+            <label style={styles.loginLabel}>Description</label>
+            <input
+              type="text"
+              value={revenuDescription}
+              onChange={(e) => setRevenuDescription(e.target.value)}
+              placeholder="Ex: Dépôt de paye 1"
+              style={styles.loginInput}
+              autoFocus
+            />
+
+            <label style={styles.loginLabel}>Montant</label>
+            <input
+              type="number"
+              step="0.01"
+              value={revenuMontant}
+              onChange={(e) => setRevenuMontant(e.target.value)}
+              placeholder="Ex: 1468.45"
+              style={styles.loginInput}
+            />
+
+            <label style={styles.loginLabel}>Mode</label>
+            <select
+              value={revenuMode}
+              onChange={(e) => setRevenuMode(e.target.value)}
+              style={styles.loginInput}
+            >
+              <option value="semaine">Semaine</option>
+              <option value="mois">Mois</option>
+              <option value="annee">Année</option>
+            </select>
+
+            <label style={styles.loginLabel}>Date</label>
+            <input
+              type="date"
+              value={revenuDate}
+              onChange={(e) => setRevenuDate(e.target.value)}
+              style={styles.loginInput}
+            />
+
+            <div style={styles.passwordModalActions}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRevenuModal(false);
+                  setRevenuDescription("");
+                  setRevenuMontant("");
+                  setRevenuMode("semaine");
+                  setRevenuDate(new Date().toISOString().slice(0, 10));
+                }}
+                style={styles.cleanButton}
+              >
+                Annuler
+              </button>
+
+              <button type="submit" style={styles.incomeSubmitButton} disabled={loading}>
+                {loading ? "Ajout..." : "Ajouter l’entrée"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {showPasswordModal && (
         <div style={styles.passwordModalOverlay}>
           <form onSubmit={changerMotDePasse} style={styles.passwordModalCard}>
@@ -2725,6 +2852,17 @@ export default function App() {
               style={styles.compactEcheanceInput}
             />
 
+            <button
+              onClick={() => {
+                setErreur("");
+                setShowRevenuModal(true);
+              }}
+              style={styles.incomeButton}
+              type="button"
+            >
+              + Entrée d’argent
+            </button>
+
             <button onClick={ajouterLigne} style={styles.compactAddButton} disabled={loading}>
               {loading ? "..." : "+ Ajouter"}
             </button>
@@ -2813,7 +2951,7 @@ export default function App() {
                           const nbX = semainesPayees(item).length;
                           const acc = montantAccumule(item);
                           const bal = balance(item);
-                          const serieSemaines = semainesEnSerie(item.echeance);
+                          const serieSemaines = semainesAfficheesPourLigne(item);
 
                           return (
                             <Fragment key={item.id}>
@@ -6016,6 +6154,45 @@ const styles = {
     color: "#86efac",
     fontWeight: "800",
     fontSize: "13px",
+  },
+,
+
+  incomeButton: {
+    height: "42px",
+    padding: "0 18px",
+    borderRadius: "14px",
+    border: "1px solid rgba(34,197,94,0.48)",
+    background: "linear-gradient(180deg, #22c55e 0%, #15803d 100%)",
+    color: "#ffffff",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 0 20px rgba(34,197,94,0.28), inset 0 1px 0 rgba(255,255,255,0.25)",
+    whiteSpace: "nowrap",
+  },
+
+  revenuModalCard: {
+    width: "460px",
+    maxWidth: "92vw",
+    padding: "26px",
+    borderRadius: "22px",
+    background: "linear-gradient(145deg, rgba(15,23,42,0.98), rgba(6,36,24,0.98))",
+    border: "1px solid rgba(34,197,94,0.38)",
+    boxShadow: "0 30px 90px rgba(0,0,0,0.55), 0 0 38px rgba(34,197,94,0.22)",
+    color: "#ffffff",
+  },
+
+  incomeSubmitButton: {
+    minWidth: "150px",
+    height: "42px",
+    padding: "0 16px",
+    borderRadius: "12px",
+    border: "1px solid rgba(255,255,255,0.22)",
+    background: "linear-gradient(180deg, #22c55e 0%, #15803d 100%)",
+    color: "#ffffff",
+    fontSize: "13px",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 0 18px rgba(34,197,94,0.30), inset 0 1px 0 rgba(255,255,255,0.25)",
   },
 
 };

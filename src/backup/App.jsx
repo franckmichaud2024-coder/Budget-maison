@@ -239,6 +239,20 @@ function semainesEnSerie(echeance) {
 }
 
 
+
+function semainesAfficheesPourLigne(item) {
+  const liste = semainesEnSerie(item.echeance);
+
+  // Quand le mode est "semaine", on affiche seulement 5 semaines.
+  // Les modes "mois" et "année" gardent les 52 semaines.
+  if (normaliserMode(item.mode) === "semaine") {
+    return liste.slice(0, 5);
+  }
+
+  return liste;
+}
+
+
 function getWeekNumberISO(date = new Date()) {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const dayNum = d.getUTCDay() || 7;
