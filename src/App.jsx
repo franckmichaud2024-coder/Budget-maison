@@ -1929,7 +1929,7 @@ export default function App() {
 
     return (
       <div key={compteActif} style={styles.pageSwitchAnimation}>
-        <div style={styles.incomeBankShell}>
+        <div style={styles.incomeBankShellBright}>
           <div style={styles.incomeBankTitle}>ENTRÉE D’ARGENT</div>
 
           <div style={styles.incomeBankToolbar}>
@@ -2001,8 +2001,8 @@ export default function App() {
             </button>
           </div>
 
-          <div style={styles.bank3177TableShell}>
-            <table style={styles.bank3177Table}>
+          <div style={styles.incomeBankTableShellBright}>
+            <table style={styles.incomeBankTableBright}>
               <thead>
                 <tr>
                   <th style={{ ...styles.bank3177Header, width: "34%" }}>DESCRIPTION</th>
@@ -2084,7 +2084,7 @@ export default function App() {
           </div>
 
           <div style={styles.bank3177TableWrap}>
-            <table style={styles.bank3177Table}>
+            <table style={styles.incomeBankTableBright}>
               <thead>
                 <tr>
                   <th style={{ ...styles.bank3177Th, width: "31%" }}>DESCRIPTION</th>
@@ -6651,6 +6651,33 @@ const styles = {
     cursor: "pointer",
     boxShadow: "0 0 18px rgba(250,204,21,0.34), inset 0 1px 0 rgba(255,255,255,0.4)",
     flex: "0 0 auto",
+  },
+,
+
+  incomeBankShellBright: {
+    width: "calc(100vw - 24px)",
+    margin: "0 auto",
+    color: "#020617",
+  },
+
+  incomeBankTableShellBright: {
+    width: "calc(100vw - 24px)",
+    maxHeight: "430px",
+    margin: "8px auto 0",
+    overflow: "auto",
+    background: "#ffffff",
+    border: "1px solid #b7c8da",
+    boxShadow: "0 18px 60px rgba(0,0,0,0.35)",
+  },
+
+  incomeBankTableBright: {
+    width: "100%",
+    minWidth: "1680px",
+    borderCollapse: "collapse",
+    tableLayout: "fixed",
+    background: "#ffffff",
+    color: "#020617",
+    fontFamily: "Arial, sans-serif",
   },
 
 };
