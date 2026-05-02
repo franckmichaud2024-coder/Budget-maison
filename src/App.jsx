@@ -6155,7 +6155,6 @@ const styles = {
     fontWeight: "800",
     fontSize: "13px",
   },
-,
 
   incomeButton: {
     height: "42px",
