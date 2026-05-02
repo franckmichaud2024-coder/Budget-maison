@@ -716,7 +716,7 @@ export default function App() {
     if (!table) return;
 
     const updateInfo = () => {
-      const max = Math.max(0, table.scrollWidth - table.clientWidth + 520);
+      const max = Math.max(0, table.scrollWidth - table.clientWidth + 650);
       setScrollInfo({
         left: table.scrollLeft,
         max,
@@ -755,7 +755,7 @@ export default function App() {
 
     // Calcul réel du scroll disponible.
     // Le +220 donne un coussin visuel pour atteindre la dernière semaine complètement.
-    const max = Math.max(0, table.scrollWidth - table.clientWidth + 520);
+    const max = Math.max(0, table.scrollWidth - table.clientWidth + 650);
     if (max <= 0) return;
 
     const nextLeft = Math.max(0, Math.min(left, max));
@@ -780,7 +780,7 @@ export default function App() {
     const table = tableScrollRef.current;
     if (!table) return;
 
-    const max = Math.max(0, table.scrollWidth - table.clientWidth + 520);
+    const max = Math.max(0, table.scrollWidth - table.clientWidth + 650);
 
     if (position === "start") bougerScroll(0);
     if (position === "middle") bougerScroll(max / 2);
@@ -3355,6 +3355,7 @@ export default function App() {
                 <th style={styles.transferHeader}>
                   TRANSFERT
                 </th>
+                    <th style={styles.transferSpacerHeader}></th>
               </tr>
 
             </thead>
@@ -3668,6 +3669,7 @@ export default function App() {
                                     ⇄
                                   </button>
                                 </td>
+                          <td style={styles.transferSpacerCell}></td>
                               </tr>
 
                               {/* Ligne du bas : cases X cliquables */}
@@ -4152,52 +4154,41 @@ const styles = {
   },
 
   transferButton: {
-    width: "64px",
-    minWidth: "64px",
+    minWidth: "70px",
     height: "30px",
     borderRadius: "9px",
     border: "1px solid #93c5fd",
     background: "#eaf3ff",
     color: "#0f172a",
-    fontWeight: "900",
+    fontWeight: "850",
     fontSize: "16px",
     cursor: "pointer",
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
   },
 
   transferColumnCell: {
-    width: "118px",
-    minWidth: "118px",
-    maxWidth: "118px",
-    boxSizing: "border-box",
-    padding: "0 14px",
+    width: "130px",
+    minWidth: "130px",
     textAlign: "center",
     verticalAlign: "middle",
     background: "#f8fafc",
     borderRight: "1px solid rgba(15,23,42,0.16)",
-    borderLeft: "1px solid rgba(15,23,42,0.16)",
     borderBottom: "1px solid rgba(15,23,42,0.16)",
-    overflow: "visible",
   },
 
   transferHeader: {
     position: "sticky",
     top: 0,
     zIndex: 50,
-    width: "118px",
-    minWidth: "118px",
-    maxWidth: "118px",
-    boxSizing: "border-box",
     background: "linear-gradient(180deg, #1d4ed8 0%, #2563eb 100%)",
     color: "#ffffff",
-    fontWeight: "900",
-    fontSize: "11px",
-    padding: "6px 10px",
+    fontWeight: "800",
+    fontSize: "12px",
+    padding: "6px",
     borderRight: "1px solid rgba(15,23,42,0.22)",
-    borderLeft: "1px solid rgba(15,23,42,0.22)",
     textAlign: "center",
     whiteSpace: "nowrap",
-    overflow: "visible",
+    minWidth: "130px",
   },
 
   amountPaleBadge: {
@@ -4276,8 +4267,8 @@ const styles = {
   },
 
   clearXRowButton: {
-    minWidth: "58px",
-    height: "28px",
+    minWidth: "70px",
+    height: "30px",
     padding: "0 10px",
     borderRadius: "10px",
     border: "1px solid rgba(56,189,248,0.58)",
@@ -4647,7 +4638,7 @@ const styles = {
 
   echeanceEditButton: {
     minWidth: "42px",
-    height: "28px",
+    height: "30px",
     padding: "0 10px",
     borderRadius: "8px",
     border: "1px solid #93c5fd",
@@ -6306,8 +6297,7 @@ const styles = {
     borderCollapse: "separate",
     borderSpacing: 0,
     tableLayout: "fixed",
-    minWidth: "3420px",
-    width: "max-content",
+    minWidth: "3600px",
     color: "#111827",
     fontSize: "12px",
   },
@@ -6390,7 +6380,7 @@ const styles = {
     borderRight: "1px solid rgba(15, 23, 42, 0.16)",
     borderBottom: "1px solid rgba(15, 23, 42, 0.16)",
     padding: "4px 6px",
-    height: "28px",
+    height: "30px",
     textAlign: "center",
     color: "#0f172a",
     fontSize: "12px",
@@ -6478,7 +6468,7 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.28)",
     borderRadius: "10px",
     width: "34px",
-    height: "28px",
+    height: "30px",
     cursor: "pointer",
     fontSize: "15px",
     fontWeight: "900",
@@ -6563,6 +6553,7 @@ const styles = {
 
   bottomScroll: {
     overflowX: "auto",
+    paddingRight: "180px",
     overflowY: "hidden",
     height: "16px",
     background: "rgba(15, 23, 42, 0.78)",
@@ -6578,7 +6569,7 @@ const styles = {
   },
 
   passwordChangeButton: {
-    height: "28px",
+    height: "30px",
     padding: "0 10px",
     borderRadius: "12px",
     border: "1px solid rgba(56,189,248,0.34)",
@@ -7069,7 +7060,7 @@ const styles = {
 
   incomeMirrorDescInput: {
     width: "100%",
-    height: "28px",
+    height: "30px",
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     background: "#ffffff",
@@ -7258,7 +7249,7 @@ const styles = {
 
   standardMirrorDescInput: {
     width: "100%",
-    height: "28px",
+    height: "30px",
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     background: "#ffffff",
@@ -7308,7 +7299,7 @@ const styles = {
 
   standardMirrorDeleteButton: {
     width: "32px",
-    height: "28px",
+    height: "30px",
     borderRadius: "9px",
     border: "1px solid rgba(255,255,255,0.25)",
     background: "linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)",
@@ -7493,7 +7484,7 @@ const styles = {
 
   entreeCleanDescInput: {
     width: "100%",
-    height: "28px",
+    height: "30px",
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     background: "#ffffff",
@@ -7643,7 +7634,7 @@ const styles = {
 
   entreeCleanEditButton: {
     width: "32px",
-    height: "28px",
+    height: "30px",
     borderRadius: "9px",
     border: "1px solid #bae6fd",
     background: "linear-gradient(180deg, #e0f2fe, #bae6fd)",
@@ -8079,6 +8070,20 @@ const styles = {
     fontWeight: "950",
     textAlign: "center",
     whiteSpace: "nowrap",
+  },
+
+  transferSpacerHeader: {
+    minWidth: "90px",
+    width: "90px",
+    background: "#020617",
+    border: "none",
+  },
+
+  transferSpacerCell: {
+    minWidth: "90px",
+    width: "90px",
+    background: "#ffffff",
+    border: "none",
   },
 
 };
