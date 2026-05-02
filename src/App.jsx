@@ -333,6 +333,7 @@ export default function App() {
   const [revenuMontant, setRevenuMontant] = useState("");
   const [revenuMode, setRevenuMode] = useState("semaine");
   const [revenuDate, setRevenuDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [revenuPrecision, setRevenuPrecision] = useState("");
 
   const [data, setData] = useState([]);
   const [erreur, setErreur] = useState("");
@@ -1126,10 +1127,14 @@ export default function App() {
 
     const montantNumber = Number(String(revenuMontant).replace(",", "."));
 
-    const descriptionRevenuFinale =
+    const descriptionRevenuBase =
       revenuDescription === "AUTRE"
         ? revenuDescriptionAutre.trim()
         : revenuDescription.trim();
+
+    const descriptionRevenuFinale = revenuPrecision.trim()
+      ? `${descriptionRevenuBase} - ${revenuPrecision.trim()}`
+      : descriptionRevenuBase;
 
     if (!descriptionRevenuFinale) {
       setErreur("Choisis une description pour l'entrée d'argent.");
@@ -1173,6 +1178,7 @@ export default function App() {
     setRevenuDescription("");
     setRevenuDescriptionAutre("");
     setRevenuMontant("");
+    setRevenuPrecision("");
     setRevenuMode("semaine");
     setRevenuDate(new Date().toISOString().slice(0, 10));
     setShowRevenuModal(false);
@@ -1905,114 +1911,153 @@ export default function App() {
   function renduTableauEntreeArgent() {
     const revenusLignes = data.filter((item) => item.type === "revenu");
 
-    const lignesParDescription = DESCRIPTIONS_REVENUS.filter((desc) => desc !== "AUTRE").map((desc) => {
-      const lignes = revenusLignes.filter(
-        (item) => String(item.description || "").toUpperCase() === desc.toUpperCase()
-      );
+    const totalGains = revenusLignes.reduce((acc, item) => acc + calculerMontants(item).semaine, 0);
 
-      const totalSemaine = lignes.reduce((acc, item) => acc + calculerMontants(item).semaine, 0);
-      const totalMois = lignes.reduce((acc, item) => acc + calculerMontants(item).mois, 0);
-      const totalAnnee = lignes.reduce((acc, item) => acc + calculerMontants(item).annee, 0);
-      const derniereDate = lignes[0]?.date
-        ? new Date(lignes[0].date).toLocaleDateString("fr-CA")
-        : "";
-
-      return {
-        description: desc,
-        lignes,
-        semaine: totalSemaine,
-        mois: totalMois,
-        annee: totalAnnee,
-        date: derniereDate,
-      };
-    });
-
-    const autresLignes = revenusLignes.filter(
-      (item) => !DESCRIPTIONS_REVENUS.some(
-        (desc) => desc !== "AUTRE" && String(item.description || "").toUpperCase() === desc.toUpperCase()
-      )
-    );
-
-    const lignesTableau = [
-      ...lignesParDescription,
-      ...autresLignes.map((item) => {
-        const montants = calculerMontants(item);
-        return {
-          description: item.description,
-          lignes: [item],
-          semaine: montants.semaine,
-          mois: montants.mois,
-          annee: montants.annee,
-          date: item.date ? new Date(item.date).toLocaleDateString("fr-CA") : "",
-          id: item.id,
-        };
-      }),
-    ];
-
-    const totalSemaine = revenusLignes.reduce((acc, item) => acc + calculerMontants(item).semaine, 0);
-    const totalMois = revenusLignes.reduce((acc, item) => acc + calculerMontants(item).mois, 0);
-    const totalAnnee = revenusLignes.reduce((acc, item) => acc + calculerMontants(item).annee, 0);
+    const lignesAffichage = revenusLignes.length
+      ? revenusLignes
+      : DESCRIPTIONS_REVENUS.filter((desc) => desc !== "AUTRE").map((desc, index) => ({
+          id: `revenu-vide-${index}`,
+          description: desc,
+          montant: 0,
+          mode: "semaine",
+          type: "revenu",
+          semaines_payees: [],
+          echeance: null,
+          date: "",
+          __vide: true,
+        }));
 
     return (
       <div key={compteActif} style={styles.pageSwitchAnimation}>
-        <div style={styles.incomePageShell}>
-          <div style={styles.incomePageTitle}>BUDGET 2024-2025</div>
-          <div style={styles.incomeSectionTitle}>ENTRÉE D'ARGENT</div>
+        <div style={styles.incomeBankShell}>
+          <div style={styles.incomeBankTitle}>ENTRÉE D’ARGENT</div>
 
-          <div style={styles.incomeToolbar}>
-            <button
-              onClick={() => {
-                setErreur("");
-                setRevenuDescription("");
-                setRevenuDescriptionAutre("");
-                setRevenuMontant("");
-                setRevenuMode("semaine");
-                setRevenuDate(new Date().toISOString().slice(0, 10));
-                setShowRevenuModal(true);
-              }}
-              style={styles.incomeButton}
-              type="button"
+          <div style={styles.incomeBankToolbar}>
+            <div style={styles.stepPill}>1</div>
+            <span style={styles.toolbarLabel}>DESCRIPTION</span>
+
+            <select
+              value={revenuDescription}
+              onChange={(e) => setRevenuDescription(e.target.value)}
+              style={styles.incomeSelect}
             >
-              + Entrée d’argent
+              <option value="">Choisir une entrée d’argent</option>
+              {DESCRIPTIONS_REVENUS.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+
+            {revenuDescription === "AUTRE" && (
+              <input
+                value={revenuDescriptionAutre}
+                onChange={(e) => setRevenuDescriptionAutre(e.target.value)}
+                placeholder="Nouvelle description"
+                style={styles.incomeTextInput}
+              />
+            )}
+
+            <input
+              value={revenuPrecision}
+              onChange={(e) => setRevenuPrecision(e.target.value)}
+              placeholder="Précision ex: nom, enfant..."
+              style={styles.incomeTextInput}
+            />
+
+            <input
+              value={revenuMontant}
+              onChange={(e) => setRevenuMontant(e.target.value)}
+              placeholder="Montant"
+              type="number"
+              step="0.01"
+              style={styles.incomeAmountInput}
+            />
+
+            <select
+              value={revenuMode}
+              onChange={(e) => setRevenuMode(e.target.value)}
+              style={styles.incomeModeSelect}
+            >
+              <option value="semaine">Semaine</option>
+              <option value="mois">Mois</option>
+              <option value="annee">Année</option>
+            </select>
+
+            <input
+              type="date"
+              value={revenuDate}
+              onChange={(e) => setRevenuDate(e.target.value)}
+              style={styles.incomeDateInput}
+            />
+
+            <button
+              onClick={ajouterRevenu}
+              style={styles.incomeAddButtonBank}
+              type="button"
+              disabled={loading}
+            >
+              {loading ? "..." : "+ Ajouter"}
             </button>
           </div>
 
-          <div style={styles.incomeTableWrap}>
-            <table style={styles.incomeTable}>
+          <div style={styles.bank3177TableShell}>
+            <table style={styles.bank3177Table}>
               <thead>
                 <tr>
-                  <th style={{ ...styles.incomeTh, ...styles.incomeThDescription }}>DESCRIPTION</th>
-                  <th style={styles.incomeTh}>SEMAINE</th>
-                  <th style={styles.incomeTh}>MOIS</th>
-                  <th style={styles.incomeTh}>ANNÉE</th>
-                  <th style={styles.incomeTh}>DATE</th>
+                  <th style={{ ...styles.bank3177Header, width: "34%" }}>DESCRIPTION</th>
+                  <th style={{ ...styles.bank3177Header, width: "12%" }}>GAINS</th>
+                  <th style={{ ...styles.bank3177Header }} colSpan={7}>DÉPENSES</th>
+                  <th style={{ ...styles.bank3177Header, width: "12%" }}>SOLDE</th>
+                </tr>
+                <tr>
+                  <th style={styles.bank3177SubHeader}></th>
+                  <th style={styles.bank3177SubHeader}></th>
+                  {Array.from({ length: 7 }).map((_, index) => (
+                    <th key={index} style={styles.bank3177SubHeader}>Dép. {index + 1}</th>
+                  ))}
+                  <th style={styles.bank3177SubHeader}></th>
                 </tr>
               </thead>
 
               <tbody>
-                {lignesTableau.map((ligne) => (
-                  <tr key={ligne.description}>
-                    <td style={styles.incomeTdDescription}>{ligne.description}</td>
-                    <td style={ligne.semaine > 0 ? styles.incomeTdMoneyHighlight : styles.incomeTdMoney}>
-                      {formatArgent(ligne.semaine)}
-                    </td>
-                    <td style={ligne.mois > 0 ? styles.incomeTdMoneyHighlight : styles.incomeTdMoney}>
-                      {formatArgent(ligne.mois)}
-                    </td>
-                    <td style={styles.incomeTdMoney}>{formatArgent(ligne.annee)}</td>
-                    <td style={styles.incomeTd}>{ligne.date}</td>
-                  </tr>
-                ))}
+                {lignesAffichage.map((item, index) => {
+                  const gain = item.__vide ? 0 : calculerMontants(item).semaine;
+                  return (
+                    <tr key={item.id || index}>
+                      <td style={styles.bank3177DescriptionCell}>
+                        <span style={styles.bank3177RowNumber}>{index + 1}</span>
+                        {item.description}
+                      </td>
 
-                <tr>
-                  <td style={styles.incomeTotalLabel}>GAINS TOTAL:</td>
-                  <td style={styles.incomeTotalMoney}>{formatArgent(totalSemaine)}</td>
-                  <td style={styles.incomeTotalMoney}>{formatArgent(totalMois)}</td>
-                  <td style={styles.incomeTotalMoney}>{formatArgent(totalAnnee)}</td>
-                  <td style={styles.incomeTotalMoney}></td>
-                </tr>
+                      <td style={styles.bank3177InputCell}>
+                        <div style={styles.bank3177AmountBox}>{formatArgent(gain)}</div>
+                      </td>
+
+                      {Array.from({ length: 7 }).map((_, depIndex) => (
+                        <td key={depIndex} style={styles.bank3177InputCell}>
+                          <div style={styles.bank3177AmountBox}>0.00</div>
+                        </td>
+                      ))}
+
+                      <td style={styles.bank3177SoldeCell}>{formatArgent(gain)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
+
+            <div style={styles.bank3177Footer}>
+              <div style={styles.bank3177FooterMetric}>
+                <span style={styles.bank3177FooterLabel}>Gains</span>
+                <strong style={styles.bank3177FooterValue}>{formatArgent(totalGains)}</strong>
+              </div>
+
+              <div style={{ ...styles.bank3177FooterMetric, ...styles.bank3177FooterSolde }}>
+                <span style={styles.bank3177FooterLabel}>Solde total</span>
+                <strong style={styles.bank3177FooterValue}>{formatArgent(totalGains)}</strong>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -2591,6 +2636,7 @@ export default function App() {
                   setRevenuDescription("");
                   setRevenuDescriptionAutre("");
                   setRevenuMontant("");
+    setRevenuPrecision("");
                   setRevenuMode("semaine");
                   setRevenuDate(new Date().toISOString().slice(0, 10));
                 }}
@@ -6472,6 +6518,140 @@ const styles = {
     fontSize: "18px",
     textAlign: "center",
     background: "#ffffff",
+  },
+,
+
+  incomeBankShell: {
+    width: "calc(100vw - 20px)",
+    margin: "0 auto",
+    color: "#ffffff",
+  },
+
+  incomeBankTitle: {
+    margin: "8px auto 10px",
+    width: "fit-content",
+    padding: "10px 32px",
+    borderRadius: "22px",
+    background: "linear-gradient(145deg, rgba(15,23,42,0.96), rgba(8,47,73,0.72))",
+    border: "1px solid rgba(125,211,252,0.38)",
+    color: "#ffffff",
+    fontSize: "30px",
+    fontWeight: "950",
+    letterSpacing: "2px",
+    textTransform: "uppercase",
+    boxShadow: "0 0 30px rgba(14,165,233,0.18)",
+    textShadow: "0 2px 0 rgba(0,0,0,0.65)",
+  },
+
+  incomeBankToolbar: {
+    minHeight: "54px",
+    margin: "0 24px 8px",
+    padding: "8px",
+    borderRadius: "18px",
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    background: "linear-gradient(180deg, rgba(15,23,42,0.96), rgba(2,6,23,0.96))",
+    border: "1px solid rgba(56,189,248,0.35)",
+    boxShadow: "0 0 22px rgba(14,165,233,0.16), inset 0 1px 0 rgba(255,255,255,0.08)",
+    overflowX: "auto",
+  },
+
+  stepPill: {
+    width: "26px",
+    height: "26px",
+    borderRadius: "999px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "linear-gradient(180deg, #38bdf8, #0369a1)",
+    color: "#ffffff",
+    fontWeight: "950",
+    boxShadow: "0 0 16px rgba(56,189,248,0.45)",
+    flex: "0 0 auto",
+  },
+
+  toolbarLabel: {
+    fontSize: "12px",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    color: "#67e8f9",
+    letterSpacing: "1px",
+    flex: "0 0 auto",
+  },
+
+  incomeSelect: {
+    height: "36px",
+    minWidth: "330px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.55)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  incomeTextInput: {
+    height: "36px",
+    minWidth: "210px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "800",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  incomeAmountInput: {
+    height: "36px",
+    width: "130px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  incomeModeSelect: {
+    height: "36px",
+    width: "135px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  incomeDateInput: {
+    height: "36px",
+    width: "150px",
+    borderRadius: "12px",
+    border: "1px solid rgba(147,197,253,0.45)",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "850",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  incomeAddButtonBank: {
+    height: "38px",
+    minWidth: "120px",
+    padding: "0 16px",
+    borderRadius: "13px",
+    border: "1px solid rgba(255,255,255,0.25)",
+    background: "linear-gradient(180deg, #facc15 0%, #ca8a04 100%)",
+    color: "#020617",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 0 18px rgba(250,204,21,0.34), inset 0 1px 0 rgba(255,255,255,0.4)",
+    flex: "0 0 auto",
   },
 
 };
