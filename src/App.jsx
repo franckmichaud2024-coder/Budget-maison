@@ -10,6 +10,8 @@ const COMPTES_BUDGET = [
   "7570 - Procédures",
 ];
 
+
+
 function ordonnerComptesBudget(liste = []) {
   const ordreFixe = COMPTES_BUDGET;
   const uniques = Array.from(new Set([...(liste || []), ...ordreFixe]));
@@ -25,8 +27,6 @@ function ordonnerComptesBudget(liste = []) {
     return String(a).localeCompare(String(b), "fr", { sensitivity: "base" });
   });
 }
-
-
 
 const SNAPSHOT_KEY = "budget_maison_snapshots_v1";
 const RESET_PASSWORD = "1234"; // Change ce mot de passe ici
@@ -402,6 +402,28 @@ export default function App() {
 
 
 
+
+  function styleOngletBas(compte) {
+    const actif = compteActif === compte;
+
+    return {
+      minWidth: "150px",
+      height: "42px",
+      padding: "0 16px",
+      borderRadius: "12px 12px 0 0",
+      border: "1px solid rgba(15,23,42,0.25)",
+      borderBottom: actif ? "3px solid #22c55e" : "2px solid #020617",
+      borderTop: actif ? "4px solid #94a3b8" : "4px solid #64748b",
+      background: actif ? "#f8fafc" : "#dbeafe",
+      color: actif ? "#0f766e" : "#020617",
+      fontWeight: "950",
+      cursor: "pointer",
+      boxShadow: actif
+        ? "0 -3px 12px rgba(34,197,94,0.18), inset 0 1px 0 rgba(255,255,255,0.9)"
+        : "inset 0 1px 0 rgba(255,255,255,0.75)",
+    };
+  }
+
   function changerCompteActif(compte) {
     setCompteActif(compte);
     setDescription("");
@@ -422,7 +444,7 @@ export default function App() {
     }
 
     const prochaineListe = [...comptesBudget, nom];
-    setComptesBudget(ordonnerComptesBudget(prochaineListe));
+    setComptesBudget(prochaineListe);
     setCompteActif(nom);
     setNouveauCompte("");
   }
@@ -458,11 +480,11 @@ export default function App() {
 
     const ancienCompte = compteActif;
 
-    const nouvelleListe = comptesBudget.map((compte) =>
+    const nouvelleListe = ordonnerComptesBudget(comptesBudget).map((compte) =>
       compte === ancienCompte ? nomFinal : compte
     );
 
-    setComptesBudget(ordonnerComptesBudget(nouvelleListe));
+    setComptesBudget(nouvelleListe);
     setCompteActif(nomFinal);
 
     const { error } = await supabase
@@ -513,29 +535,13 @@ export default function App() {
     }
 
     const prochaineListe = comptesBudget.filter((c) => c !== compteActif);
-    setComptesBudget(ordonnerComptesBudget(prochaineListe));
+    setComptesBudget(prochaineListe);
     setCompteActif(prochaineListe[0]);
     setData([]);
   }
 
   function couleurCompte(compte) {
-    const couleurs = [
-      "#22c55e",
-      "#0ea5e9",
-      "#f59e0b",
-      "#a855f7",
-      "#ef4444",
-      "#14b8a6",
-      "#84cc16",
-      "#ec4899",
-    ];
-
-    let total = 0;
-    for (let i = 0; i < compte.length; i += 1) {
-      total += compte.charCodeAt(i);
-    }
-
-    return couleurs[total % couleurs.length];
+    return "#64748b";
   }
 
   function numeroCompte(compte) {
@@ -620,11 +626,11 @@ export default function App() {
 
     const ancienneValeur = compteEdition;
 
-    const prochaineListe = comptesBudget.map((c) =>
+    const prochaineListe = ordonnerComptesBudget(comptesBudget).map((c) =>
       c === ancienneValeur ? nouveauNom : c
     );
 
-    setComptesBudget(ordonnerComptesBudget(prochaineListe));
+    setComptesBudget(prochaineListe);
 
     if (compteActif === ancienneValeur) {
       setCompteActif(nouveauNom);
@@ -2704,7 +2710,7 @@ export default function App() {
           style={styles.accountSelectClean}
           title="Changer de page comme un onglet Excel"
         >
-          {comptesBudget.map((compte) => (
+          {ordonnerComptesBudget(comptesBudget).map((compte) => (
             <option key={compte} value={compte}>
               {compte}
             </option>
@@ -3772,7 +3778,7 @@ export default function App() {
         )}
 
         <div style={styles.excelTabsBar}>
-          {comptesBudget.map((compte) => {
+          {ordonnerComptesBudget(comptesBudget).map((compte) => {
             const couleur = couleurCompte(compte);
             const actif = compteActif === compte;
 
@@ -8084,34 +8090,6 @@ const styles = {
     fontWeight: "950",
     textAlign: "center",
     whiteSpace: "nowrap",
-  },
-
-  bottomTabUniform: {
-    minWidth: "145px",
-    height: "42px",
-    padding: "0 16px",
-    borderRadius: "12px 12px 0 0",
-    border: "1px solid rgba(15,23,42,0.28)",
-    borderBottom: "2px solid #020617",
-    background: "#dbeafe",
-    color: "#020617",
-    fontWeight: "950",
-    cursor: "pointer",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
-  },
-
-  bottomTabUniformActive: {
-    minWidth: "145px",
-    height: "42px",
-    padding: "0 16px",
-    borderRadius: "12px 12px 0 0",
-    border: "1px solid rgba(15,23,42,0.20)",
-    borderBottom: "3px solid #22c55e",
-    background: "#f8fafc",
-    color: "#0f766e",
-    fontWeight: "950",
-    cursor: "pointer",
-    boxShadow: "0 -4px 14px rgba(34,197,94,0.18), inset 0 1px 0 rgba(255,255,255,0.90)",
   },
 
 };
