@@ -1917,7 +1917,16 @@ export default function App() {
   function renduTableauEntreeArgent() {
     const revenusLignes = data.filter((item) => item.type === "revenu");
 
-    const lignesAffichage = revenusLignes;
+    const lignesAffichage = revenusLignes.length
+      ? revenusLignes
+      : DESCRIPTIONS_REVENUS.filter((desc) => desc !== "AUTRE").map((desc, index) => ({
+          id: `revenu-vide-${index}`,
+          description: desc,
+          montant: 0,
+          mode: "semaine",
+          type: "revenu",
+          __vide: true,
+        }));
 
     const calculRevenu = (item) => {
       if (item.__vide) return { semaine: 0, mois: 0, annee: 0 };
@@ -2150,14 +2159,6 @@ export default function App() {
                       </tr>
                     );
                   })}
-
-                  {lignesAffichage.length === 0 && (
-                    <tr>
-                      <td colSpan={5} style={styles.entreeCleanEmptyCell}>
-                        Aucune entrée d’argent. Ajoute une ligne avec la barre du haut.
-                      </td>
-                    </tr>
-                  )}
 
                   <tr>
                     <td style={styles.entreeCleanTotalLabel}>GAINS TOTAL</td>
@@ -7399,16 +7400,6 @@ const styles = {
     fontWeight: "950",
     textAlign: "right",
     whiteSpace: "nowrap",
-  },
-
-  entreeCleanEmptyCell: {
-    background: "#f8fafc",
-    color: "#020617",
-    border: "1px solid #cbd5e1",
-    padding: "18px",
-    fontSize: "14px",
-    fontWeight: "850",
-    textAlign: "center",
   },
 
 };
