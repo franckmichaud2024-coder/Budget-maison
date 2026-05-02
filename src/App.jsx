@@ -3896,9 +3896,11 @@ export default function App() {
               )}
             </tbody>
             </table>
+            <div style={styles.ultraBankInScroll}>
+              {renduResumeUltra3185()}
+            </div>
             <div style={styles.bottomSafeSpacer} />
           </div>
-          {renduResumeUltra3185()}
           </>
           ) : (
             <div style={styles.blankAccountPage}>
@@ -8267,12 +8269,23 @@ const styles = {
   },
 
 
-  ultraBankSummaryShell: {
+  ultraBankInScroll: {
+    position: "sticky",
+    left: "0",
     width: "min(1120px, calc(100vw - 44px))",
-    margin: "18px auto 92px auto",
+    margin: "22px auto 0 auto",
+    padding: "0 0 22px 0",
+    background: "#ffffff",
+    zIndex: 5,
+  },
+
+  ultraBankSummaryShell: {
+    width: "100%",
+    margin: "0 auto",
     padding: "0",
     color: "#000",
     fontFamily: "Arial, Helvetica, sans-serif",
+    background: "#ffffff",
   },
 
   ultraBankMiniGrid: {
