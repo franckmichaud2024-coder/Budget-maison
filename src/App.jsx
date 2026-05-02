@@ -6282,7 +6282,6 @@ const styles = {
     cursor: "pointer",
     boxShadow: "0 0 18px rgba(34,197,94,0.30), inset 0 1px 0 rgba(255,255,255,0.25)",
   },
-,
 
   incomePageShell: {
     width: "min(1280px, calc(100vw - 70px))",
