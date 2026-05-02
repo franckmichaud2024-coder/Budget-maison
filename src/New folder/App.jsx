@@ -1817,6 +1817,7 @@ export default function App() {
 
     return (
       <div style={styles.ultraBankSummaryShell}>
+        <div style={styles.ultraBankSectionTitle}>SOUS-TOTAL DES DÉPENSES :</div>
         <div style={styles.ultraBankMiniGrid}>
           <div style={styles.ultraBankBlackLabel}>SOUS-TOTAL DES DÉPENSES :</div>
           <div style={styles.ultraBankBlackHead}>SEMAINE</div>
@@ -6211,7 +6212,7 @@ const styles = {
 
   countBadge: {
     marginLeft: "8px",
-    background: "#000",
+    background: "linear-gradient(180deg, #020617 0%, #000000 100%)",
     color: "#fff",
     borderRadius: "10px",
     padding: "2px 6px",
@@ -8272,10 +8273,13 @@ const styles = {
   ultraBankInScroll: {
     position: "sticky",
     left: "0",
-    width: "min(1120px, calc(100vw - 44px))",
-    margin: "22px auto 0 auto",
-    padding: "0 0 22px 0",
-    background: "#ffffff",
+    width: "min(1160px, calc(100vw - 48px))",
+    margin: "26px auto 0 auto",
+    padding: "18px 20px 28px 20px",
+    background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+    border: "1px solid rgba(148,163,184,0.55)",
+    borderRadius: "20px",
+    boxShadow: "0 18px 45px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.95)",
     zIndex: 5,
   },
 
@@ -8283,22 +8287,24 @@ const styles = {
     width: "100%",
     margin: "0 auto",
     padding: "0",
-    color: "#000",
+    color: "#020617",
     fontFamily: "Arial, Helvetica, sans-serif",
-    background: "#ffffff",
+    background: "transparent",
   },
 
   ultraBankMiniGrid: {
     display: "grid",
-    gridTemplateColumns: "minmax(280px, 1fr) 86px 86px 86px",
+    gridTemplateColumns: "minmax(520px, 1fr) 96px 96px 96px",
     alignItems: "stretch",
-    border: "1px solid #000",
+    border: "1px solid #020617",
     borderBottom: "0",
     background: "#fff",
+    overflow: "hidden",
+    boxShadow: "0 10px 22px rgba(15,23,42,0.08)",
   },
 
   ultraBankBlackLabel: {
-    background: "#000",
+    background: "linear-gradient(180deg, #020617 0%, #000000 100%)",
     color: "#fff",
     fontWeight: "950",
     fontSize: "13px",
@@ -8313,7 +8319,7 @@ const styles = {
   },
 
   ultraBankBlackHead: {
-    background: "#000",
+    background: "linear-gradient(180deg, #020617 0%, #000000 100%)",
     color: "#fff",
     fontWeight: "950",
     fontSize: "12px",
@@ -8323,7 +8329,7 @@ const styles = {
   },
 
   ultraBankBlackHeadLeft: {
-    background: "#000",
+    background: "linear-gradient(180deg, #020617 0%, #000000 100%)",
     color: "#fff",
     fontWeight: "950",
     fontSize: "12px",
@@ -8342,17 +8348,31 @@ const styles = {
     whiteSpace: "nowrap",
   },
 
-  ultraBankBenefTitle: {
-    marginTop: "20px",
-    background: "#2b5bd7",
-    border: "2px solid #000",
+  ultraBankSectionTitle: {
+    background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #60a5fa 100%)",
+    border: "1px solid rgba(15,23,42,0.9)",
     borderBottom: "0",
     textAlign: "center",
     fontWeight: "950",
-    fontSize: "18px",
-    padding: "6px",
+    fontSize: "20px",
+    padding: "13px 8px",
     color: "#ffffff",
-    letterSpacing: "0.3px",
+    letterSpacing: "0.9px",
+    textTransform: "uppercase",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.32), 0 10px 22px rgba(37,99,235,0.18)",
+  },
+
+  ultraBankBenefTitle: {
+    marginTop: "22px",
+    background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #60a5fa 100%)",
+    border: "1px solid rgba(15,23,42,0.9)",
+    borderBottom: "0",
+    textAlign: "center",
+    fontWeight: "950",
+    fontSize: "20px",
+    padding: "13px 8px",
+    color: "#ffffff",
+    letterSpacing: "0.9px",
     textTransform: "uppercase",
   },
 
@@ -8366,13 +8386,18 @@ const styles = {
   },
 
   ultraBankBottomZone: {
-    width: "min(640px, 100%)",
-    margin: "22px auto 0 auto",
+    width: "min(660px, 100%)",
+    margin: "26px auto 0 auto",
     display: "grid",
     gridTemplateColumns: "1fr",
-    gap: "7px",
-    fontSize: "12px",
+    gap: "11px",
+    fontSize: "13px",
     fontWeight: "850",
+    padding: "24px 22px",
+    background: "linear-gradient(180deg, rgba(248,250,252,0.98) 0%, rgba(241,245,249,0.98) 100%)",
+    border: "1px solid rgba(148,163,184,0.62)",
+    borderRadius: "18px",
+    boxShadow: "0 16px 34px rgba(15,23,42,0.10), inset 0 1px 0 rgba(255,255,255,0.95)",
   },
 
   ultraBankSoldeText: {
@@ -8383,34 +8408,41 @@ const styles = {
 
   ultraBankBankLine: {
     display: "grid",
-    gridTemplateColumns: "1fr 140px",
+    gridTemplateColumns: "1fr 145px",
     alignItems: "center",
-    gap: "10px",
+    gap: "12px",
     color: "#000",
   },
 
   ultraBankInput: {
     width: "140px",
-    height: "24px",
-    background: "#fff200",
-    border: "1px solid #fff200",
-    color: "#000",
+    height: "28px",
+    background: "linear-gradient(180deg, #f8fafc 0%, #e5e7eb 100%)",
+    border: "1px solid #cbd5e1",
+    borderRadius: "8px",
+    color: "#020617",
     textAlign: "right",
     fontWeight: "950",
-    padding: "0 8px",
+    padding: "0 10px",
     boxSizing: "border-box",
+    boxShadow: "inset 0 1px 2px rgba(15,23,42,0.10), 0 3px 10px rgba(15,23,42,0.08)",
+    outline: "none",
   },
 
   ultraBankCalculated: {
-    color: "#000",
+    color: "#020617",
     textAlign: "right",
     fontWeight: "950",
-    paddingRight: "8px",
+    padding: "6px 10px",
+    background: "linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)",
+    border: "1px solid #cbd5e1",
+    borderRadius: "8px",
+    boxShadow: "inset 0 1px 2px rgba(15,23,42,0.08)",
   },
 
   ultraBankResult: {
-    marginTop: "8px",
-    background: "#020617",
+    marginTop: "12px",
+    background: "linear-gradient(135deg, #020617 0%, #0f172a 55%, #1e3a8a 100%)",
     color: "#fff",
     borderRadius: "10px",
     padding: "10px 12px",
