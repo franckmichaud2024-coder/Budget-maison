@@ -220,7 +220,11 @@ function round2(val) {
 }
 
 function formatArgent(val) {
-  return `${round2(val).toFixed(2)} $`;
+  const n = round2(Number(val || 0));
+  return `${new Intl.NumberFormat("fr-CA", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n)} $`;
 }
 
 function formatNombreInput(val) {
@@ -1958,94 +1962,127 @@ export default function App() {
     const lignesDepenses = data.filter((item) => item.type !== "revenu");
     const lignesRevenus = revenusResume3185.filter((item) => item.type === "revenu");
     const dep = totauxListeTransactions(lignesDepenses);
-    const rev = totauxListeTransactions(lignesRevenus);
-    const argentAccumule3185 = round2(
+    const revEntrees = totauxListeTransactions(lignesRevenus);
+    const rev = {
+      semaine: revEntrees.semaine - dep.semaine,
+      mois: revEntrees.mois - dep.mois,
+      annee: revEntrees.annee - dep.annee,
+    };
+
+    // LOGIQUE COMPTE ENVELOPPE
+    // A = montant que je devrais avoir dans le compte enveloppe
+    // B = montant réel écrit manuellement
+    // C = A - B
+    const montantQueJeDevraisAvoir = round2(
       lignesDepenses.reduce((acc, item) => acc + montantAccumule(item), 0)
     );
-    const banque = lireMontantBanque3185("banque");
-    const argentAVerser3185 = lireMontantBanque3185("argentAVerser3185");
-    const montantCompte3185 = lireMontantBanque3185("montantCompte3185");
-    const soldeAVirer3185 = lireMontantBanque3185("soldeAVirer3185");
-    const soldeApres3185 = round2(rev.mois + banque - dep.mois);
+    const montantQueJaiDansCompte = lireMontantBanque3185("montantCompte3185");
+    const argentAVerserCompte = round2(montantQueJeDevraisAvoir - montantQueJaiDansCompte);
+
+    const valeurPositive = argentAVerserCompte >= 0;
+
+    const inputMontantCompte = (
+      <div style={styles.bankCleanInputWrap}>
+        <input
+          value={banque3185?.montantCompte3185 ?? ""}
+          onChange={(e) => {
+            const texte = e.target.value.replace(",", ".");
+            if (/^-?\d*\.?\d*$/.test(texte)) sauvegarderChampBanque3185("montantCompte3185", texte);
+          }}
+          onBlur={(e) => sauvegarderChampBanque3185("montantCompte3185", formatNombreInput(e.target.value))}
+          placeholder="0.00"
+          style={styles.bankCleanInput}
+        />
+        <span style={styles.bankCleanDollar}>$</span>
+      </div>
+    );
+
+    const valeurBox = (valeur, extra = {}) => (
+      <div style={{ ...styles.bankCleanValueBox, ...extra }}>{formatArgent(valeur)}</div>
+    );
+
+    const resumeTable = (titre, icone, totals) => (
+      <section style={styles.bankCleanTopCard}>
+        <button
+          type="button"
+          onClick={resetPositionResume3185}
+          style={styles.bankCleanResetButton}
+          title="Replacer la carte"
+        >
+          ↻
+        </button>
+        <div style={styles.bankCleanTitleLine}>
+          <span style={styles.bankCleanTitleIcon}>{icone}</span>
+          <span>{titre}</span>
+        </div>
+        <div style={styles.bankCleanGrid}>
+          <div style={styles.bankCleanHeadLeft}>DESCRIPTION</div>
+          <div style={styles.bankCleanHead}>SEMAINE</div>
+          <div style={styles.bankCleanHead}>MOIS</div>
+          <div style={styles.bankCleanHead}>ANNÉE</div>
+
+          <div style={styles.bankCleanLabel}>TOTAL DES {titre.replace("SOUS-TOTAL DES ", "")} :</div>
+          <div style={styles.bankCleanAmount}>{formatArgent(totals.semaine)}</div>
+          <div style={styles.bankCleanAmount}>{formatArgent(totals.mois)}</div>
+          <div style={styles.bankCleanAmount}>{formatArgent(totals.annee)}</div>
+        </div>
+      </section>
+    );
 
     return (
       <div
         style={{
-          ...styles.ultraBankSummaryShell,
+          ...styles.bankCleanShell,
           transform: `translate(${resume3185Position.x}px, ${resume3185Position.y}px)`,
         }}
         onMouseDown={demarrerDragResume3185}
         title="Clique et glisse pour déplacer cette carte"
       >
-        <button
-          type="button"
-          onClick={resetPositionResume3185}
-          style={styles.ultraBankResetPositionButton}
-          title="Replacer la carte"
-        >
-          ↺
-        </button>
+        {resumeTable("SOUS-TOTAL DES DÉPENSES", "♙", dep)}
+        {resumeTable("BÉNÉFICES", "🎁", rev)}
 
-        <div style={styles.ultraBankSectionTitle}>SOUS-TOTAL DES DÉPENSES :</div>
-        <div style={styles.ultraBankMiniGrid}>
-          <div style={styles.ultraBankBlackHeadLeft}>DESCRIPTION</div>
-          <div style={styles.ultraBankBlackHead}>SEMAINE</div>
-          <div style={styles.ultraBankBlackHead}>MOIS</div>
-          <div style={styles.ultraBankBlackHead}>ANNÉE</div>
-
-          <div style={styles.ultraBankTotalLabel}>TOTAL DES DÉPENSES :</div>
-          <div style={styles.ultraBankWhiteValue}>{formatArgent(dep.semaine)}</div>
-          <div style={styles.ultraBankWhiteValue}>{formatArgent(dep.mois)}</div>
-          <div style={styles.ultraBankWhiteValue}>{formatArgent(dep.annee)}</div>
-        </div>
-
-        <div style={styles.ultraBankBenefTitle}>BÉNÉFICES :</div>
-        <div style={styles.ultraBankMiniGrid}>
-          <div style={styles.ultraBankBlackHeadLeft}>DESCRIPTION</div>
-          <div style={styles.ultraBankBlackHead}>SEMAINE</div>
-          <div style={styles.ultraBankBlackHead}>MOIS</div>
-          <div style={styles.ultraBankBlackHead}>ANNÉE</div>
-
-          <div style={styles.ultraBankTotalLabel}>TOTAL DES BÉNÉFICES :</div>
-          <div style={styles.ultraBankWhiteValue}>{formatArgent(rev.semaine)}</div>
-          <div style={styles.ultraBankWhiteValue}>{formatArgent(rev.mois)}</div>
-          <div style={styles.ultraBankWhiteValue}>{formatArgent(rev.annee)}</div>
-        </div>
-
-        <div style={styles.ultraBankBottomZone}>
-          <div style={styles.ultraBankSoldeText}>
-            Solde en banque après avoir payé <span>Compte 3185</span>
+        <section style={styles.bankCleanBalanceCard}>
+          <div style={styles.bankCleanBalanceTitle}>
+            <span style={styles.bankCleanBalanceIcon}>🏦</span>
+            <span>SOLDE EN BANQUE APRÈS AVOIR PAYÉ LE COMPTE</span>
           </div>
 
-          <div style={styles.ultraBankBankLine}>
-            <span style={styles.ultraBankIconBox}>💼</span>
-            <strong>ARGENT ACCUMULÉ</strong>
-            <div style={styles.ultraBankCalculated}>{formatNombreInput(argentAccumule3185)}</div>
-          </div>
+          <div style={styles.bankCleanRowsBox}>
+            <div style={styles.bankCleanRow}>
+              <span style={styles.bankCleanRowIcon}>💵</span>
+              <div style={styles.bankCleanRowText}>
+                <strong>MONTANT QUE JE DEVRAI AVOIR</strong>
+                <span>DANS LE COMPTE ENVELOPPE</span>
+              </div>
+              {valeurBox(montantQueJeDevraisAvoir, styles.bankCleanBlueValue)}
+            </div>
 
-          <div style={styles.ultraBankBankLine}>
-            <span style={styles.ultraBankIconBox}>💵</span>
-            <strong>ARGENT À VERSER AU COMPTE 3185</strong>
-            {renduChampBanque3185("argentAVerser3185", "0.00")}
-          </div>
+            <div style={styles.bankCleanRow}>
+              <span style={styles.bankCleanRowIcon}>🏦</span>
+              <div style={styles.bankCleanRowText}>
+                <strong>MONTANT QUE J’AI DANS</strong>
+                <span>LE NUMÉRO DE COMPTE ENVELOPPE</span>
+              </div>
+              {inputMontantCompte}
+            </div>
 
-          <div style={styles.ultraBankBankLine}>
-            <span style={styles.ultraBankIconBox}>👤</span>
-            <strong>MONTANT QUE J’AI DANS LE NUMÉRO DE COMPTE ****</strong>
-            {renduChampBanque3185("montantCompte3185", "0.00")}
+            <div style={{ ...styles.bankCleanRow, borderBottom: "0" }}>
+              <span style={styles.bankCleanRowIcon}>💵</span>
+              <div style={styles.bankCleanRowText}>
+                <strong>ARGENT À VERSER</strong>
+                <span>AU COMPTE ENVELOPPE</span>
+              </div>
+              {valeurBox(argentAVerserCompte, {
+                ...styles.bankCleanGreenValue,
+                color: valeurPositive ? "#047857" : "#dc2626",
+                background: valeurPositive
+                  ? "linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%)"
+                  : "linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%)",
+                borderColor: valeurPositive ? "#bbf7d0" : "#fecdd3",
+              })}
+            </div>
           </div>
-
-          <div style={styles.ultraBankBankLine}>
-            <span style={styles.ultraBankIconBox}>🏦</span>
-            <strong>SOLDE QUE JE DOIS VIRER AU COMPTE ****</strong>
-            {renduChampBanque3185("soldeAVirer3185", "0.00")}
-          </div>
-
-          <div style={styles.ultraBankResult}>
-            <span>Solde estimé après 3185</span>
-            <strong>{formatArgent(soldeApres3185)}</strong>
-          </div>
-        </div>
+        </section>
       </div>
     );
   }
@@ -8756,6 +8793,261 @@ const styles = {
     gap: "18px",
     fontSize: "12px",
     boxShadow: "0 12px 26px rgba(2,6,23,0.28)",
+  },
+
+
+  bankCleanShell: {
+    position: "relative",
+    width: "1000px",
+    maxWidth: "1000px",
+    margin: "18px auto 36px auto",
+    padding: "0",
+    color: "#0f172a",
+    cursor: "grab",
+    userSelect: "none",
+    fontFamily: "Arial, sans-serif",
+    boxSizing: "border-box",
+  },
+
+  bankCleanTopCard: {
+    position: "relative",
+    width: "100%",
+    margin: "0 0 14px 0",
+    padding: "14px 14px 12px 14px",
+    background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+    border: "1px solid #e2e8f0",
+    borderRadius: "12px",
+    boxShadow: "0 8px 22px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.95)",
+    boxSizing: "border-box",
+  },
+
+  bankCleanResetButton: {
+    position: "absolute",
+    top: "14px",
+    right: "16px",
+    width: "36px",
+    height: "36px",
+    borderRadius: "999px",
+    border: "1px solid #d1d5db",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "950",
+    fontSize: "20px",
+    lineHeight: "32px",
+    cursor: "pointer",
+    boxShadow: "0 6px 16px rgba(15,23,42,0.12)",
+  },
+
+  bankCleanTitleLine: {
+    display: "flex",
+    alignItems: "center",
+    gap: "16px",
+    color: "#0f2b5f",
+    fontWeight: "950",
+    fontSize: "27px",
+    letterSpacing: "0.4px",
+    textTransform: "uppercase",
+    padding: "0 48px 10px 0",
+  },
+
+  bankCleanTitleIcon: {
+    width: "42px",
+    height: "42px",
+    borderRadius: "12px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#ffffff",
+    background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+    boxShadow: "0 8px 18px rgba(37,99,235,0.22)",
+    fontSize: "22px",
+  },
+
+  bankCleanGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 150px 150px 170px",
+    overflow: "hidden",
+    border: "1px solid #d1d5db",
+    borderRadius: "8px",
+    background: "#ffffff",
+  },
+
+  bankCleanHeadLeft: {
+    background: "linear-gradient(180deg, #0b1738 0%, #061126 100%)",
+    color: "#ffffff",
+    fontWeight: "950",
+    fontSize: "15px",
+    padding: "12px 16px",
+    borderRight: "1px solid #cbd5e1",
+    textAlign: "left",
+  },
+
+  bankCleanHead: {
+    background: "linear-gradient(180deg, #0b1738 0%, #061126 100%)",
+    color: "#ffffff",
+    fontWeight: "950",
+    fontSize: "15px",
+    padding: "12px 12px",
+    borderRight: "1px solid #cbd5e1",
+    textAlign: "center",
+  },
+
+  bankCleanLabel: {
+    color: "#020617",
+    fontWeight: "950",
+    fontSize: "15px",
+    padding: "13px 16px",
+    borderRight: "1px solid #d1d5db",
+    textTransform: "uppercase",
+  },
+
+  bankCleanAmount: {
+    color: "#020617",
+    fontWeight: "950",
+    fontSize: "17px",
+    padding: "13px 12px",
+    textAlign: "center",
+    borderRight: "1px solid #d1d5db",
+  },
+
+  bankCleanBalanceCard: {
+    width: "100%",
+    marginTop: "16px",
+    padding: "18px 20px 20px 20px",
+    background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+    border: "1.5px solid #93c5fd",
+    borderRadius: "12px",
+    boxShadow: "0 12px 32px rgba(15,23,42,0.10), inset 0 1px 0 rgba(255,255,255,0.95)",
+    boxSizing: "border-box",
+  },
+
+  bankCleanBalanceTitle: {
+    display: "flex",
+    alignItems: "center",
+    gap: "16px",
+    color: "#0f2b5f",
+    fontWeight: "950",
+    fontSize: "21px",
+    letterSpacing: "0.25px",
+    textTransform: "uppercase",
+    marginBottom: "10px",
+  },
+
+  bankCleanBalanceIcon: {
+    width: "44px",
+    height: "44px",
+    borderRadius: "999px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "linear-gradient(135deg, #1e40af 0%, #2563eb 100%)",
+    color: "#ffffff",
+    fontSize: "24px",
+    boxShadow: "0 8px 18px rgba(30,64,175,0.25)",
+  },
+
+  bankCleanRowsBox: {
+    border: "1px solid #e2e8f0",
+    borderRadius: "12px",
+    padding: "12px 18px",
+    background: "rgba(255,255,255,0.82)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9)",
+  },
+
+  bankCleanRow: {
+    display: "grid",
+    gridTemplateColumns: "78px 1fr 260px",
+    alignItems: "center",
+    gap: "18px",
+    minHeight: "74px",
+    borderBottom: "1px solid #e2e8f0",
+  },
+
+  bankCleanRowIcon: {
+    width: "50px",
+    height: "50px",
+    borderRadius: "12px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "#ffffff",
+    border: "1px solid #dbe3ef",
+    boxShadow: "0 8px 18px rgba(15,23,42,0.08)",
+    fontSize: "22px",
+    justifySelf: "center",
+  },
+
+  bankCleanRowText: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "5px",
+    color: "#0f2b5f",
+    fontSize: "17px",
+    fontWeight: "900",
+    textTransform: "uppercase",
+    lineHeight: 1.15,
+  },
+
+  bankCleanValueBox: {
+    justifySelf: "end",
+    width: "240px",
+    minHeight: "44px",
+    boxSizing: "border-box",
+    borderRadius: "9px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#020617",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    padding: "0 18px",
+    fontSize: "22px",
+    fontWeight: "950",
+    boxShadow: "inset 0 2px 4px rgba(15,23,42,0.06)",
+  },
+
+  bankCleanBlueValue: {
+    background: "linear-gradient(180deg, #f8fbff 0%, #eff6ff 100%)",
+    color: "#0f2b5f",
+    borderColor: "#bfdbfe",
+  },
+
+  bankCleanGreenValue: {
+    color: "#047857",
+    borderColor: "#bbf7d0",
+  },
+
+  bankCleanInputWrap: {
+    justifySelf: "end",
+    position: "relative",
+    width: "240px",
+  },
+
+  bankCleanInput: {
+    width: "240px",
+    height: "44px",
+    boxSizing: "border-box",
+    borderRadius: "9px",
+    border: "1px solid #d1d5db",
+    background: "#ffffff",
+    color: "#020617",
+    textAlign: "right",
+    padding: "0 38px 0 14px",
+    fontSize: "22px",
+    fontWeight: "950",
+    outline: "none",
+    boxShadow: "inset 0 2px 4px rgba(15,23,42,0.06)",
+  },
+
+  bankCleanDollar: {
+    position: "absolute",
+    right: "18px",
+    top: "50%",
+    transform: "translateY(-50%)",
+    color: "#020617",
+    fontWeight: "950",
+    fontSize: "20px",
+    pointerEvents: "none",
   },
 
 };

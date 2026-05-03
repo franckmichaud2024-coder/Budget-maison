@@ -261,6 +261,19 @@ function trierCategories(liste = []) {
   });
 }
 
+function trierLignesParDescription(liste = []) {
+  return [...liste].sort((a, b) => {
+    const da = String(a?.description || "").trim();
+    const db = String(b?.description || "").trim();
+
+    return da.localeCompare(db, "fr", {
+      sensitivity: "base",
+      ignorePunctuation: true,
+      numeric: true,
+    });
+  });
+}
+
 function semainesEnSerie(echeance) {
   const e = Number(echeance);
 
@@ -378,6 +391,7 @@ export default function App() {
   const [valeurs3177, setValeurs3177] = useState({});
   const [input3177Actif, setInput3177Actif] = useState(null);
   const [selectionXRange, setSelectionXRange] = useState(null);
+  const [lignesDesactivees, setLignesDesactivees] = useState({});
   const [revenusResume3185, setRevenusResume3185] = useState([]);
   const [banque3185, setBanque3185] = useState(() => {
     try {
@@ -1084,6 +1098,27 @@ export default function App() {
     return `budget_3177_valeurs_${getUserId() || "anonymous"}`;
   }
 
+  function getLignesDesactiveesStorageKey() {
+    return `budget_3185_lignes_desactivees_${getUserId() || "anonymous"}`;
+  }
+
+  function ligneEstActive(item) {
+    if (!item?.id) return true;
+    return lignesDesactivees[item.id] !== true;
+  }
+
+  function basculerLigneActive(item) {
+    if (!item?.id) return;
+
+    const nextValues = {
+      ...lignesDesactivees,
+      [item.id]: lignesDesactivees[item.id] !== true,
+    };
+
+    setLignesDesactivees(nextValues);
+    localStorage.setItem(getLignesDesactiveesStorageKey(), JSON.stringify(nextValues));
+  }
+
   useEffect(() => {
     if (!session?.user?.id) {
       setValeurs3177({});
@@ -1094,6 +1129,19 @@ export default function App() {
       setValeurs3177(JSON.parse(localStorage.getItem(getValeurs3177StorageKey()) || "{}"));
     } catch {
       setValeurs3177({});
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setLignesDesactivees({});
+      return;
+    }
+
+    try {
+      setLignesDesactivees(JSON.parse(localStorage.getItem(getLignesDesactiveesStorageKey()) || "{}"));
+    } catch {
+      setLignesDesactivees({});
     }
   }, [session?.user?.id]);
 
@@ -1197,8 +1245,13 @@ export default function App() {
     return semainesPayees(item).includes(semaine);
   }
 
-  function montantAccumule(item) {
+  function montantAccumuleBrut(item) {
     return semainesPayees(item).length * calculerMontants(item).semaine;
+  }
+
+  function montantAccumule(item) {
+    if (!ligneEstActive(item)) return 0;
+    return montantAccumuleBrut(item);
   }
 
   function balance(item) {
@@ -1614,35 +1667,55 @@ export default function App() {
   }
 
   async function toggleSemaine(item, semaine) {
-    setErreur("");
-
     const idLigne = item?.id;
     if (!idLigne) return;
 
     const semainesActuelles = semainesPayees(item).map(Number);
     const semaineCliquee = Number(semaine);
     let semainesListe = semainesActuelles;
-    let messageAction = "";
 
     const memeLigneSelectionnee =
-      selectionXRange && selectionXRange.id === idLigne && selectionXRange.semaine !== semaineCliquee;
+      selectionXRange &&
+      selectionXRange.id === idLigne &&
+      Number(selectionXRange.semaine) !== semaineCliquee;
 
-    // PRO : 1er clic = début, 2e clic = fin. L'app remplit toute la plage automatiquement.
+    // X AUTO PAR ORDRE VISUEL :
+    // On remplit selon l'ordre affiché à l'écran, pas selon l'ordre numérique.
+    // Exemple avec échéance 35 : 36, 37, 38...52, 1, 2...14.
+    // Si tu cliques 36 puis 14, l'app remplit toute cette séquence visible.
     if (memeLigneSelectionnee) {
-      const debut = Math.min(Number(selectionXRange.semaine), semaineCliquee);
-      const fin = Math.max(Number(selectionXRange.semaine), semaineCliquee);
-      const plage = Array.from({ length: fin - debut + 1 }, (_, i) => debut + i);
+      const semaineDepart = Number(selectionXRange.semaine);
+      const serieVisuelle = semainesAfficheesPourLigne(item).map(Number);
+      const indexDepart = serieVisuelle.indexOf(semaineDepart);
+      const indexFin = serieVisuelle.indexOf(semaineCliquee);
+      const semainesSet = new Set(semainesActuelles);
 
-      semainesListe = Array.from(new Set([...semainesActuelles, ...plage])).sort((a, b) => a - b);
+      let plageSemaines = [];
+
+      if (indexDepart !== -1 && indexFin !== -1) {
+        const debutIndex = Math.min(indexDepart, indexFin);
+        const finIndex = Math.max(indexDepart, indexFin);
+        plageSemaines = serieVisuelle.slice(debutIndex, finIndex + 1);
+      } else {
+        // Sécurité : si une semaine n'est pas trouvée dans la ligne affichée,
+        // on garde l'ancien comportement numérique.
+        const debut = Math.min(semaineDepart, semaineCliquee);
+        const fin = Math.max(semaineDepart, semaineCliquee);
+        plageSemaines = Array.from({ length: fin - debut + 1 }, (_, i) => debut + i);
+      }
+
+      for (const s of plageSemaines) {
+        semainesSet.add(Number(s));
+      }
+
+      semainesListe = Array.from(semainesSet).sort((a, b) => a - b);
       setSelectionXRange(null);
-      messageAction = `X ajoutés automatiquement de la semaine ${debut} à ${fin}.`;
     } else if (semainesActuelles.includes(semaineCliquee)) {
       semainesListe = semainesActuelles.filter((s) => s !== semaineCliquee);
       setSelectionXRange(null);
     } else {
       semainesListe = [...semainesActuelles, semaineCliquee].sort((a, b) => a - b);
       setSelectionXRange({ id: idLigne, semaine: semaineCliquee });
-      messageAction = `Début sélectionné : semaine ${semaineCliquee}. Clique une autre semaine pour remplir automatiquement la plage.`;
     }
 
     enregistrerSnapshot("Avant modification calendrier");
@@ -1665,12 +1738,6 @@ export default function App() {
 
     if (semainesListe.length === 0) {
       resetTransfertSiTousXEffaces(item);
-      setErreur(`Tous les X ont été effacés pour "${item.description}". Le transfert pourra être refait seulement après avoir remis les 52 X.`);
-      return;
-    }
-
-    if (messageAction) {
-      setErreur(messageAction);
     }
   }
 
@@ -1751,16 +1818,24 @@ export default function App() {
       acc[nomBloc].push(item);
     }
 
+    for (const bloc of Object.keys(acc)) {
+      acc[bloc] = trierLignesParDescription(acc[bloc]);
+    }
+
     return acc;
   }, [data]);
 
-  const lignesBlocActif = data.filter((item) => normaliserBloc(item.bloc) === normaliserBloc(blocActif));
+  const lignesBlocActif = trierLignesParDescription(
+    data.filter((item) => normaliserBloc(item.bloc) === normaliserBloc(blocActif))
+  );
 
   const groupesFiltres = useMemo(() => {
     const acc = {};
 
     for (const bloc of BLOCS_FIXES) {
-      const lignes = data.filter((item) => normaliserBloc(item.bloc) === bloc);
+      const lignes = trierLignesParDescription(
+        data.filter((item) => normaliserBloc(item.bloc) === bloc)
+      );
 
       if (lignes.length > 0) {
         acc[bloc] = lignes;
@@ -1883,94 +1958,129 @@ export default function App() {
     const lignesDepenses = data.filter((item) => item.type !== "revenu");
     const lignesRevenus = revenusResume3185.filter((item) => item.type === "revenu");
     const dep = totauxListeTransactions(lignesDepenses);
-    const rev = totauxListeTransactions(lignesRevenus);
-    const argentAccumule3185 = round2(
+    const revBrut = totauxListeTransactions(lignesRevenus);
+const depBrut = totauxListeTransactions(lignesDepenses);
+
+const rev = {
+  semaine: revBrut.semaine - depBrut.semaine,
+  mois: revBrut.mois - depBrut.mois,
+  annee: revBrut.annee - depBrut.annee,
+};
+
+    // LOGIQUE COMPTE ENVELOPPE
+    // A = montant que je devrais avoir dans le compte enveloppe
+    // B = montant réel écrit manuellement
+    // C = A - B
+    const montantQueJeDevraisAvoir = round2(
       lignesDepenses.reduce((acc, item) => acc + montantAccumule(item), 0)
     );
-    const banque = lireMontantBanque3185("banque");
-    const argentAVerser3185 = lireMontantBanque3185("argentAVerser3185");
-    const montantCompte3185 = lireMontantBanque3185("montantCompte3185");
-    const soldeAVirer3185 = lireMontantBanque3185("soldeAVirer3185");
-    const soldeApres3185 = round2(rev.mois + banque - dep.mois);
+    const montantQueJaiDansCompte = lireMontantBanque3185("montantCompte3185");
+    const argentAVerserCompte = round2(montantQueJeDevraisAvoir - montantQueJaiDansCompte);
+
+    const valeurPositive = argentAVerserCompte >= 0;
+
+    const inputMontantCompte = (
+      <div style={styles.bankCleanInputWrap}>
+        <input
+          value={banque3185?.montantCompte3185 ?? ""}
+          onChange={(e) => {
+            const texte = e.target.value.replace(",", ".");
+            if (/^-?\d*\.?\d*$/.test(texte)) sauvegarderChampBanque3185("montantCompte3185", texte);
+          }}
+          onBlur={(e) => sauvegarderChampBanque3185("montantCompte3185", formatNombreInput(e.target.value))}
+          placeholder="0.00"
+          style={styles.bankCleanInput}
+        />
+        <span style={styles.bankCleanDollar}>$</span>
+      </div>
+    );
+
+    const valeurBox = (valeur, extra = {}) => (
+      <div style={{ ...styles.bankCleanValueBox, ...extra }}>{formatArgent(valeur)}</div>
+    );
+
+    const resumeTable = (titre, icone, totals) => (
+      <section style={styles.bankCleanTopCard}>
+        <button
+          type="button"
+          onClick={resetPositionResume3185}
+          style={styles.bankCleanResetButton}
+          title="Replacer la carte"
+        >
+          ↻
+        </button>
+        <div style={styles.bankCleanTitleLine}>
+          <span style={styles.bankCleanTitleIcon}>{icone}</span>
+          <span>{titre}</span>
+        </div>
+        <div style={styles.bankCleanGrid}>
+          <div style={styles.bankCleanHeadLeft}>DESCRIPTION</div>
+          <div style={styles.bankCleanHead}>SEMAINE</div>
+          <div style={styles.bankCleanHead}>MOIS</div>
+          <div style={styles.bankCleanHead}>ANNÉE</div>
+
+          <div style={styles.bankCleanLabel}>TOTAL DES {titre.replace("SOUS-TOTAL DES ", "")} :</div>
+          <div style={styles.bankCleanAmount}>{formatArgent(totals.semaine)}</div>
+          <div style={styles.bankCleanAmount}>{formatArgent(totals.mois)}</div>
+          <div style={styles.bankCleanAmount}>{formatArgent(totals.annee)}</div>
+        </div>
+      </section>
+    );
 
     return (
       <div
         style={{
-          ...styles.ultraBankSummaryShell,
+          ...styles.bankCleanShell,
           transform: `translate(${resume3185Position.x}px, ${resume3185Position.y}px)`,
         }}
         onMouseDown={demarrerDragResume3185}
         title="Clique et glisse pour déplacer cette carte"
       >
-        <button
-          type="button"
-          onClick={resetPositionResume3185}
-          style={styles.ultraBankResetPositionButton}
-          title="Replacer la carte"
-        >
-          ↺
-        </button>
+        {resumeTable("SOUS-TOTAL DES DÉPENSES", "♙", dep)}
+        {resumeTable("BÉNÉFICES", "🎁", rev)}
 
-        <div style={styles.ultraBankSectionTitle}>SOUS-TOTAL DES DÉPENSES :</div>
-        <div style={styles.ultraBankMiniGrid}>
-          <div style={styles.ultraBankBlackHeadLeft}>DESCRIPTION</div>
-          <div style={styles.ultraBankBlackHead}>SEMAINE</div>
-          <div style={styles.ultraBankBlackHead}>MOIS</div>
-          <div style={styles.ultraBankBlackHead}>ANNÉE</div>
-
-          <div style={styles.ultraBankTotalLabel}>TOTAL DES DÉPENSES :</div>
-          <div style={styles.ultraBankWhiteValue}>{formatArgent(dep.semaine)}</div>
-          <div style={styles.ultraBankWhiteValue}>{formatArgent(dep.mois)}</div>
-          <div style={styles.ultraBankWhiteValue}>{formatArgent(dep.annee)}</div>
-        </div>
-
-        <div style={styles.ultraBankBenefTitle}>BÉNÉFICES :</div>
-        <div style={styles.ultraBankMiniGrid}>
-          <div style={styles.ultraBankBlackHeadLeft}>DESCRIPTION</div>
-          <div style={styles.ultraBankBlackHead}>SEMAINE</div>
-          <div style={styles.ultraBankBlackHead}>MOIS</div>
-          <div style={styles.ultraBankBlackHead}>ANNÉE</div>
-
-          <div style={styles.ultraBankTotalLabel}>TOTAL DES BÉNÉFICES :</div>
-          <div style={styles.ultraBankWhiteValue}>{formatArgent(rev.semaine)}</div>
-          <div style={styles.ultraBankWhiteValue}>{formatArgent(rev.mois)}</div>
-          <div style={styles.ultraBankWhiteValue}>{formatArgent(rev.annee)}</div>
-        </div>
-
-        <div style={styles.ultraBankBottomZone}>
-          <div style={styles.ultraBankSoldeText}>
-            Solde en banque après avoir payé <span>Compte 3185</span>
+        <section style={styles.bankCleanBalanceCard}>
+          <div style={styles.bankCleanBalanceTitle}>
+            <span style={styles.bankCleanBalanceIcon}>🏦</span>
+            <span>SOLDE EN BANQUE APRÈS AVOIR PAYÉ LE COMPTE</span>
           </div>
 
-          <div style={styles.ultraBankBankLine}>
-            <span style={styles.ultraBankIconBox}>💼</span>
-            <strong>ARGENT ACCUMULÉ</strong>
-            <div style={styles.ultraBankCalculated}>{formatNombreInput(argentAccumule3185)}</div>
-          </div>
+          <div style={styles.bankCleanRowsBox}>
+            <div style={styles.bankCleanRow}>
+              <span style={styles.bankCleanRowIcon}>💵</span>
+              <div style={styles.bankCleanRowText}>
+                <strong>MONTANT QUE JE DEVRAI AVOIR</strong>
+                <span>DANS LE COMPTE ENVELOPPE</span>
+              </div>
+              {valeurBox(montantQueJeDevraisAvoir, styles.bankCleanBlueValue)}
+            </div>
 
-          <div style={styles.ultraBankBankLine}>
-            <span style={styles.ultraBankIconBox}>💵</span>
-            <strong>ARGENT À VERSER AU COMPTE 3185</strong>
-            {renduChampBanque3185("argentAVerser3185", "0.00")}
-          </div>
+            <div style={styles.bankCleanRow}>
+              <span style={styles.bankCleanRowIcon}>🏦</span>
+              <div style={styles.bankCleanRowText}>
+                <strong>MONTANT QUE J’AI DANS</strong>
+                <span>LE NUMÉRO DE COMPTE ENVELOPPE</span>
+              </div>
+              {inputMontantCompte}
+            </div>
 
-          <div style={styles.ultraBankBankLine}>
-            <span style={styles.ultraBankIconBox}>👤</span>
-            <strong>MONTANT QUE J’AI DANS LE NUMÉRO DE COMPTE ****</strong>
-            {renduChampBanque3185("montantCompte3185", "0.00")}
+            <div style={{ ...styles.bankCleanRow, borderBottom: "0" }}>
+              <span style={styles.bankCleanRowIcon}>💵</span>
+              <div style={styles.bankCleanRowText}>
+                <strong>ARGENT À VERSER</strong>
+                <span>AU COMPTE ENVELOPPE</span>
+              </div>
+              {valeurBox(argentAVerserCompte, {
+                ...styles.bankCleanGreenValue,
+                color: valeurPositive ? "#047857" : "#dc2626",
+                background: valeurPositive
+                  ? "linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%)"
+                  : "linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%)",
+                borderColor: valeurPositive ? "#bbf7d0" : "#fecdd3",
+              })}
+            </div>
           </div>
-
-          <div style={styles.ultraBankBankLine}>
-            <span style={styles.ultraBankIconBox}>🏦</span>
-            <strong>SOLDE QUE JE DOIS VIRER AU COMPTE ****</strong>
-            {renduChampBanque3185("soldeAVirer3185", "0.00")}
-          </div>
-
-          <div style={styles.ultraBankResult}>
-            <span>Solde estimé après 3185</span>
-            <strong>{formatArgent(soldeApres3185)}</strong>
-          </div>
-        </div>
+        </section>
       </div>
     );
   }
@@ -2111,7 +2221,9 @@ export default function App() {
     const lignesVisibles3185 = [];
 
     for (const bloc of BLOCS_FIXES) {
-      const lignesBloc = data.filter((item) => normaliserBloc(item.bloc) === bloc);
+      const lignesBloc = trierLignesParDescription(
+        data.filter((item) => normaliserBloc(item.bloc) === bloc)
+      );
       lignesVisibles3185.push(...lignesBloc);
     }
 
@@ -3684,7 +3796,9 @@ export default function App() {
                           const calcul = calculerMontants(item);
                           const isDepense = item.type === "depense";
                           const nbX = semainesPayees(item).length;
+                          const activeLigne = ligneEstActive(item);
                           const acc = montantAccumule(item);
+                          const accBrut = montantAccumuleBrut(item);
                           const bal = balance(item);
                           const serieSemaines = semainesAfficheesPourLigne(item);
 
@@ -3721,8 +3835,22 @@ export default function App() {
                                   ) : (
                                     <div style={styles.descriptionRowTools}>
                                       <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          basculerLigneActive(item);
+                                        }}
+                                        style={{
+                                          ...styles.toggleCompteButton,
+                                          ...(activeLigne ? styles.toggleCompteButtonOn : styles.toggleCompteButtonOff),
+                                        }}
+                                        title={activeLigne ? "Ligne active : incluse dans le total accumulé" : "Ligne désactivée : exclue du total accumulé"}
+                                      >
+                                        {activeLigne ? "ON" : "OFF"}
+                                      </button>
+                                      <button
                                         onClick={() => commencerEditionInfo(item)}
-                                        style={{ ...styles.descriptionEditButton, width: "100%" }}
+                                        style={{ ...styles.descriptionEditButton, flex: 1 }}
                                         title="Cliquer pour modifier la catégorie / note"
                                       >
                                         {item.description || "-"}
@@ -3880,7 +4008,21 @@ export default function App() {
                                   { rowSpan: 2 }
                                 )}
                                 {celluleFixe(nbX, 6, { verticalAlign: "middle" }, { rowSpan: 2 })}
-                                {celluleFixe(formatArgent(acc), 7, { ...styles.accumuleCell, verticalAlign: "middle" }, { rowSpan: 2 })}
+                                {celluleFixe(
+                                  formatArgent(acc),
+                                  7,
+                                  {
+                                    ...styles.accumuleCell,
+                                    ...(activeLigne ? {} : styles.accumuleCellDisabled),
+                                    verticalAlign: "middle",
+                                  },
+                                  {
+                                    rowSpan: 2,
+                                    title: activeLigne
+                                      ? "Montant accumulé comptabilisé dans le total"
+                                      : `Ligne désactivée : ${formatArgent(accBrut)} non comptabilisé`,
+                                  }
+                                )}
                                 {celluleFixe(
                                   <div style={{ ...styles.actionGroup, justifyContent: "center" }}>
                                     <button
@@ -4574,8 +4716,7 @@ const styles = {
   descriptionRowTools: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: "8px",
+    gap: "6px",
     width: "100%",
   },
 
@@ -6713,11 +6854,39 @@ const styles = {
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
   },
 
+  toggleCompteButton: {
+    minWidth: "42px",
+    height: "24px",
+    borderRadius: "999px",
+    border: "1px solid rgba(15,23,42,0.14)",
+    color: "#ffffff",
+    fontSize: "10px",
+    fontWeight: "900",
+    cursor: "pointer",
+    boxShadow: "0 3px 8px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.30)",
+    flexShrink: 0,
+  },
+
+  toggleCompteButtonOn: {
+    background: "linear-gradient(135deg, #22c55e, #16a34a)",
+  },
+
+  toggleCompteButtonOff: {
+    background: "linear-gradient(135deg, #ef4444, #b91c1c)",
+  },
+
   accumuleCell: {
     background: "#f8fafc",
     color: "#0f172a",
     fontWeight: "650",
     borderLeft: "1px solid rgba(148,163,184,0.55)",
+  },
+
+  accumuleCellDisabled: {
+    background: "#fff1f2",
+    color: "#dc2626",
+    border: "1px solid rgba(248,113,113,0.75)",
+    fontWeight: "900",
   },
 
   redText: {
@@ -8622,6 +8791,261 @@ const styles = {
     gap: "18px",
     fontSize: "12px",
     boxShadow: "0 12px 26px rgba(2,6,23,0.28)",
+  },
+
+
+  bankCleanShell: {
+    position: "relative",
+    width: "1000px",
+    maxWidth: "1000px",
+    margin: "18px auto 36px auto",
+    padding: "0",
+    color: "#0f172a",
+    cursor: "grab",
+    userSelect: "none",
+    fontFamily: "Arial, sans-serif",
+    boxSizing: "border-box",
+  },
+
+  bankCleanTopCard: {
+    position: "relative",
+    width: "100%",
+    margin: "0 0 14px 0",
+    padding: "14px 14px 12px 14px",
+    background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+    border: "1px solid #e2e8f0",
+    borderRadius: "12px",
+    boxShadow: "0 8px 22px rgba(15,23,42,0.08), inset 0 1px 0 rgba(255,255,255,0.95)",
+    boxSizing: "border-box",
+  },
+
+  bankCleanResetButton: {
+    position: "absolute",
+    top: "14px",
+    right: "16px",
+    width: "36px",
+    height: "36px",
+    borderRadius: "999px",
+    border: "1px solid #d1d5db",
+    background: "#ffffff",
+    color: "#020617",
+    fontWeight: "950",
+    fontSize: "20px",
+    lineHeight: "32px",
+    cursor: "pointer",
+    boxShadow: "0 6px 16px rgba(15,23,42,0.12)",
+  },
+
+  bankCleanTitleLine: {
+    display: "flex",
+    alignItems: "center",
+    gap: "16px",
+    color: "#0f2b5f",
+    fontWeight: "950",
+    fontSize: "27px",
+    letterSpacing: "0.4px",
+    textTransform: "uppercase",
+    padding: "0 48px 10px 0",
+  },
+
+  bankCleanTitleIcon: {
+    width: "42px",
+    height: "42px",
+    borderRadius: "12px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#ffffff",
+    background: "linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)",
+    boxShadow: "0 8px 18px rgba(37,99,235,0.22)",
+    fontSize: "22px",
+  },
+
+  bankCleanGrid: {
+    display: "grid",
+    gridTemplateColumns: "1fr 150px 150px 170px",
+    overflow: "hidden",
+    border: "1px solid #d1d5db",
+    borderRadius: "8px",
+    background: "#ffffff",
+  },
+
+  bankCleanHeadLeft: {
+    background: "linear-gradient(180deg, #0b1738 0%, #061126 100%)",
+    color: "#ffffff",
+    fontWeight: "950",
+    fontSize: "15px",
+    padding: "12px 16px",
+    borderRight: "1px solid #cbd5e1",
+    textAlign: "left",
+  },
+
+  bankCleanHead: {
+    background: "linear-gradient(180deg, #0b1738 0%, #061126 100%)",
+    color: "#ffffff",
+    fontWeight: "950",
+    fontSize: "15px",
+    padding: "12px 12px",
+    borderRight: "1px solid #cbd5e1",
+    textAlign: "center",
+  },
+
+  bankCleanLabel: {
+    color: "#020617",
+    fontWeight: "950",
+    fontSize: "15px",
+    padding: "13px 16px",
+    borderRight: "1px solid #d1d5db",
+    textTransform: "uppercase",
+  },
+
+  bankCleanAmount: {
+    color: "#020617",
+    fontWeight: "950",
+    fontSize: "17px",
+    padding: "13px 12px",
+    textAlign: "center",
+    borderRight: "1px solid #d1d5db",
+  },
+
+  bankCleanBalanceCard: {
+    width: "100%",
+    marginTop: "16px",
+    padding: "18px 20px 20px 20px",
+    background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+    border: "1.5px solid #93c5fd",
+    borderRadius: "12px",
+    boxShadow: "0 12px 32px rgba(15,23,42,0.10), inset 0 1px 0 rgba(255,255,255,0.95)",
+    boxSizing: "border-box",
+  },
+
+  bankCleanBalanceTitle: {
+    display: "flex",
+    alignItems: "center",
+    gap: "16px",
+    color: "#0f2b5f",
+    fontWeight: "950",
+    fontSize: "21px",
+    letterSpacing: "0.25px",
+    textTransform: "uppercase",
+    marginBottom: "10px",
+  },
+
+  bankCleanBalanceIcon: {
+    width: "44px",
+    height: "44px",
+    borderRadius: "999px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "linear-gradient(135deg, #1e40af 0%, #2563eb 100%)",
+    color: "#ffffff",
+    fontSize: "24px",
+    boxShadow: "0 8px 18px rgba(30,64,175,0.25)",
+  },
+
+  bankCleanRowsBox: {
+    border: "1px solid #e2e8f0",
+    borderRadius: "12px",
+    padding: "12px 18px",
+    background: "rgba(255,255,255,0.82)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9)",
+  },
+
+  bankCleanRow: {
+    display: "grid",
+    gridTemplateColumns: "78px 1fr 260px",
+    alignItems: "center",
+    gap: "18px",
+    minHeight: "74px",
+    borderBottom: "1px solid #e2e8f0",
+  },
+
+  bankCleanRowIcon: {
+    width: "50px",
+    height: "50px",
+    borderRadius: "12px",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "#ffffff",
+    border: "1px solid #dbe3ef",
+    boxShadow: "0 8px 18px rgba(15,23,42,0.08)",
+    fontSize: "22px",
+    justifySelf: "center",
+  },
+
+  bankCleanRowText: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "5px",
+    color: "#0f2b5f",
+    fontSize: "17px",
+    fontWeight: "900",
+    textTransform: "uppercase",
+    lineHeight: 1.15,
+  },
+
+  bankCleanValueBox: {
+    justifySelf: "end",
+    width: "240px",
+    minHeight: "44px",
+    boxSizing: "border-box",
+    borderRadius: "9px",
+    border: "1px solid #cbd5e1",
+    background: "#ffffff",
+    color: "#020617",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    padding: "0 18px",
+    fontSize: "22px",
+    fontWeight: "950",
+    boxShadow: "inset 0 2px 4px rgba(15,23,42,0.06)",
+  },
+
+  bankCleanBlueValue: {
+    background: "linear-gradient(180deg, #f8fbff 0%, #eff6ff 100%)",
+    color: "#0f2b5f",
+    borderColor: "#bfdbfe",
+  },
+
+  bankCleanGreenValue: {
+    color: "#047857",
+    borderColor: "#bbf7d0",
+  },
+
+  bankCleanInputWrap: {
+    justifySelf: "end",
+    position: "relative",
+    width: "240px",
+  },
+
+  bankCleanInput: {
+    width: "240px",
+    height: "44px",
+    boxSizing: "border-box",
+    borderRadius: "9px",
+    border: "1px solid #d1d5db",
+    background: "#ffffff",
+    color: "#020617",
+    textAlign: "right",
+    padding: "0 38px 0 14px",
+    fontSize: "22px",
+    fontWeight: "950",
+    outline: "none",
+    boxShadow: "inset 0 2px 4px rgba(15,23,42,0.06)",
+  },
+
+  bankCleanDollar: {
+    position: "absolute",
+    right: "18px",
+    top: "50%",
+    transform: "translateY(-50%)",
+    color: "#020617",
+    fontWeight: "950",
+    fontSize: "20px",
+    pointerEvents: "none",
   },
 
 };
