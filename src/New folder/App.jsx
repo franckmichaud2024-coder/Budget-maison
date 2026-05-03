@@ -377,6 +377,7 @@ export default function App() {
   const [noteEdition, setNoteEdition] = useState("");
   const [valeurs3177, setValeurs3177] = useState({});
   const [input3177Actif, setInput3177Actif] = useState(null);
+  const [selectionXRange, setSelectionXRange] = useState(null);
   const [revenusResume3185, setRevenusResume3185] = useState([]);
   const [banque3185, setBanque3185] = useState(() => {
     try {
@@ -406,6 +407,17 @@ export default function App() {
     }
 
     return defaults;
+  });
+
+
+  const [resume3185Position, setResume3185Position] = useState(() => {
+    try {
+      const saved = localStorage.getItem("budget-resume-3185-position-v1");
+      if (saved) return { x: 0, y: 0, ...JSON.parse(saved) };
+    } catch (err) {
+      // ignore
+    }
+    return { x: 0, y: 0 };
   });
 
 
@@ -1604,12 +1616,33 @@ export default function App() {
   async function toggleSemaine(item, semaine) {
     setErreur("");
 
-    let semainesListe = semainesPayees(item);
+    const idLigne = item?.id;
+    if (!idLigne) return;
 
-    if (semainesListe.includes(semaine)) {
-      semainesListe = semainesListe.filter((s) => s !== semaine);
+    const semainesActuelles = semainesPayees(item).map(Number);
+    const semaineCliquee = Number(semaine);
+    let semainesListe = semainesActuelles;
+    let messageAction = "";
+
+    const memeLigneSelectionnee =
+      selectionXRange && selectionXRange.id === idLigne && selectionXRange.semaine !== semaineCliquee;
+
+    // PRO : 1er clic = début, 2e clic = fin. L'app remplit toute la plage automatiquement.
+    if (memeLigneSelectionnee) {
+      const debut = Math.min(Number(selectionXRange.semaine), semaineCliquee);
+      const fin = Math.max(Number(selectionXRange.semaine), semaineCliquee);
+      const plage = Array.from({ length: fin - debut + 1 }, (_, i) => debut + i);
+
+      semainesListe = Array.from(new Set([...semainesActuelles, ...plage])).sort((a, b) => a - b);
+      setSelectionXRange(null);
+      messageAction = `X ajoutés automatiquement de la semaine ${debut} à ${fin}.`;
+    } else if (semainesActuelles.includes(semaineCliquee)) {
+      semainesListe = semainesActuelles.filter((s) => s !== semaineCliquee);
+      setSelectionXRange(null);
     } else {
-      semainesListe = [...semainesListe, semaine].sort((a, b) => a - b);
+      semainesListe = [...semainesActuelles, semaineCliquee].sort((a, b) => a - b);
+      setSelectionXRange({ id: idLigne, semaine: semaineCliquee });
+      messageAction = `Début sélectionné : semaine ${semaineCliquee}. Clique une autre semaine pour remplir automatiquement la plage.`;
     }
 
     enregistrerSnapshot("Avant modification calendrier");
@@ -1617,7 +1650,7 @@ export default function App() {
     const { error } = await supabase
       .from("budget_transactions")
       .update({ semaines_payees: semainesListe })
-      .eq("id", item.id);
+      .eq("id", idLigne);
 
     if (error) {
       setErreur(error.message);
@@ -1626,13 +1659,18 @@ export default function App() {
 
     setData((prev) =>
       prev.map((row) =>
-        row.id === item.id ? { ...row, semaines_payees: semainesListe } : row
+        row.id === idLigne ? { ...row, semaines_payees: semainesListe } : row
       )
     );
 
     if (semainesListe.length === 0) {
       resetTransfertSiTousXEffaces(item);
       setErreur(`Tous les X ont été effacés pour "${item.description}". Le transfert pourra être refait seulement après avoir remis les 52 X.`);
+      return;
+    }
+
+    if (messageAction) {
+      setErreur(messageAction);
     }
   }
 
@@ -1804,27 +1842,83 @@ export default function App() {
     );
   }
 
+  function demarrerDragResume3185(e) {
+    if (["INPUT", "BUTTON", "SELECT", "TEXTAREA"].includes(e.target.tagName)) return;
+
+    e.preventDefault();
+    const departX = e.clientX;
+    const departY = e.clientY;
+    const positionDepart = resume3185Position;
+
+    function bouger(ev) {
+      setResume3185Position({
+        x: positionDepart.x + (ev.clientX - departX),
+        y: positionDepart.y + (ev.clientY - departY),
+      });
+    }
+
+    function finir(ev) {
+      const positionFinale = {
+        x: positionDepart.x + (ev.clientX - departX),
+        y: positionDepart.y + (ev.clientY - departY),
+      };
+      setResume3185Position(positionFinale);
+      localStorage.setItem("budget-resume-3185-position-v1", JSON.stringify(positionFinale));
+      window.removeEventListener("mousemove", bouger);
+      window.removeEventListener("mouseup", finir);
+    }
+
+    window.addEventListener("mousemove", bouger);
+    window.addEventListener("mouseup", finir);
+  }
+
+  function resetPositionResume3185(e) {
+    e.stopPropagation();
+    const positionFinale = { x: 0, y: 0 };
+    setResume3185Position(positionFinale);
+    localStorage.setItem("budget-resume-3185-position-v1", JSON.stringify(positionFinale));
+  }
+
   function renduResumeUltra3185() {
     const lignesDepenses = data.filter((item) => item.type !== "revenu");
     const lignesRevenus = revenusResume3185.filter((item) => item.type === "revenu");
     const dep = totauxListeTransactions(lignesDepenses);
     const rev = totauxListeTransactions(lignesRevenus);
+    const argentAccumule3185 = round2(
+      lignesDepenses.reduce((acc, item) => acc + montantAccumule(item), 0)
+    );
     const banque = lireMontantBanque3185("banque");
-    const videotronMono = lireMontantBanque3185("videotronMono");
-    const mono = lireMontantBanque3185("mono");
-    const totalMono = round2(videotronMono + mono);
+    const argentAVerser3185 = lireMontantBanque3185("argentAVerser3185");
+    const montantCompte3185 = lireMontantBanque3185("montantCompte3185");
+    const soldeAVirer3185 = lireMontantBanque3185("soldeAVirer3185");
     const soldeApres3185 = round2(rev.mois + banque - dep.mois);
 
     return (
-      <div style={styles.ultraBankSummaryShell}>
+      <div
+        style={{
+          ...styles.ultraBankSummaryShell,
+          transform: `translate(${resume3185Position.x}px, ${resume3185Position.y}px)`,
+        }}
+        onMouseDown={demarrerDragResume3185}
+        title="Clique et glisse pour déplacer cette carte"
+      >
+        <button
+          type="button"
+          onClick={resetPositionResume3185}
+          style={styles.ultraBankResetPositionButton}
+          title="Replacer la carte"
+        >
+          ↺
+        </button>
+
         <div style={styles.ultraBankSectionTitle}>SOUS-TOTAL DES DÉPENSES :</div>
         <div style={styles.ultraBankMiniGrid}>
-          <div style={styles.ultraBankBlackLabel}>SOUS-TOTAL DES DÉPENSES :</div>
+          <div style={styles.ultraBankBlackHeadLeft}>DESCRIPTION</div>
           <div style={styles.ultraBankBlackHead}>SEMAINE</div>
           <div style={styles.ultraBankBlackHead}>MOIS</div>
           <div style={styles.ultraBankBlackHead}>ANNÉE</div>
 
-          <div style={styles.ultraBankBlackSpacer}></div>
+          <div style={styles.ultraBankTotalLabel}>TOTAL DES DÉPENSES :</div>
           <div style={styles.ultraBankWhiteValue}>{formatArgent(dep.semaine)}</div>
           <div style={styles.ultraBankWhiteValue}>{formatArgent(dep.mois)}</div>
           <div style={styles.ultraBankWhiteValue}>{formatArgent(dep.annee)}</div>
@@ -1837,7 +1931,7 @@ export default function App() {
           <div style={styles.ultraBankBlackHead}>MOIS</div>
           <div style={styles.ultraBankBlackHead}>ANNÉE</div>
 
-          <div style={styles.ultraBankTotalLabel}>TOTAL :</div>
+          <div style={styles.ultraBankTotalLabel}>TOTAL DES BÉNÉFICES :</div>
           <div style={styles.ultraBankWhiteValue}>{formatArgent(rev.semaine)}</div>
           <div style={styles.ultraBankWhiteValue}>{formatArgent(rev.mois)}</div>
           <div style={styles.ultraBankWhiteValue}>{formatArgent(rev.annee)}</div>
@@ -1849,23 +1943,27 @@ export default function App() {
           </div>
 
           <div style={styles.ultraBankBankLine}>
-            <strong>Banque :</strong>
-            {renduChampBanque3185("banque", "0.00")}
+            <span style={styles.ultraBankIconBox}>💼</span>
+            <strong>ARGENT ACCUMULÉ</strong>
+            <div style={styles.ultraBankCalculated}>{formatNombreInput(argentAccumule3185)}</div>
           </div>
 
           <div style={styles.ultraBankBankLine}>
-            <strong>Vidéotr. Mono :</strong>
-            {renduChampBanque3185("videotronMono", "0.00")}
+            <span style={styles.ultraBankIconBox}>💵</span>
+            <strong>ARGENT À VERSER AU COMPTE 3185</strong>
+            {renduChampBanque3185("argentAVerser3185", "0.00")}
           </div>
 
           <div style={styles.ultraBankBankLine}>
-            <strong>Mono :</strong>
-            {renduChampBanque3185("mono", "0.00")}
+            <span style={styles.ultraBankIconBox}>👤</span>
+            <strong>MONTANT QUE J’AI DANS LE NUMÉRO DE COMPTE ****</strong>
+            {renduChampBanque3185("montantCompte3185", "0.00")}
           </div>
 
           <div style={styles.ultraBankBankLine}>
-            <strong>Total Mono :</strong>
-            <span style={styles.ultraBankCalculated}>{formatArgent(totalMono)}</span>
+            <span style={styles.ultraBankIconBox}>🏦</span>
+            <strong>SOLDE QUE JE DOIS VIRER AU COMPTE ****</strong>
+            {renduChampBanque3185("soldeAVirer3185", "0.00")}
           </div>
 
           <div style={styles.ultraBankResult}>
@@ -3556,6 +3654,10 @@ export default function App() {
                     (acc, item) => acc + calculerMontants(item).annee,
                     0
                   );
+                  const totalAccumuleBloc = lignes.reduce(
+                    (acc, item) => acc + montantAccumule(item),
+                    0
+                  );
 
                   return (
                     <Fragment key={nomBloc}>
@@ -3815,7 +3917,7 @@ export default function App() {
                                   return (
                                     <td
                                       key={`top-${item.id}-${semaine}`}
-                                      title={`Semaine ${semaine}`}
+                                      title={selectionXRange?.id === item.id ? `Clique pour remplir de la semaine ${selectionXRange.semaine} à ${semaine}` : `Semaine ${semaine}`}
                                       style={{
                                         ...styles.weekTopCell,
                                         background: payee
@@ -3835,14 +3937,16 @@ export default function App() {
                                 })}
 
                                 <td style={styles.transferColumnCell} rowSpan={2}>
-                                  <button
-                                    type="button"
-                                    onClick={() => transfererChiffre(item)}
-                                    style={styles.transferButton}
-                                    title="Transfert permis seulement avec 52 X. Pour retransférer : effacer tous les X puis remettre les 52 X."
-                                  >
-                                    ⇄
-                                  </button>
+                                  {normaliserMode(item.mode) !== "semaine" && (
+                                    <button
+                                      type="button"
+                                      onClick={() => transfererChiffre(item)}
+                                      style={styles.transferButton}
+                                      title="Transfert permis seulement avec 52 X. Pour retransférer : effacer tous les X puis remettre les 52 X."
+                                    >
+                                      ⇄
+                                    </button>
+                                  )}
                                 </td>
                               </tr>
 
@@ -3887,7 +3991,11 @@ export default function App() {
                         {celluleFixe(formatArgent(totalAnnee), 4, styles.totalCell)}
                         {celluleFixe("", 5, styles.totalCell)}
                         {celluleFixe("", 6, styles.totalCell)}
-                        {celluleFixe("", 7, styles.totalCell)}
+                        {celluleFixe(formatArgent(totalAccumuleBloc), 7, {
+                          ...styles.totalCell,
+                          color: totalAccumuleBloc > 0 ? "#22c55e" : "#ffffff",
+                          textShadow: totalAccumuleBloc > 0 ? "0 0 8px rgba(34,197,94,0.55)" : "none",
+                        })}
                         {celluleFixe("", 8, styles.totalCell)}
                         <td colSpan={53} style={styles.totalCalendar}></td>
                       </tr>
@@ -4056,12 +4164,12 @@ const styles = {
     minWidth: "155px",
     height: "40px",
     padding: "0 14px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(34,197,94,0.85)",
     background: "linear-gradient(180deg, #071a12 0%, #020617 100%)",
     color: "#86efac",
-    fontSize: "18px",
-    fontWeight: "950",
+    fontSize: "13px",
+    fontWeight: "900",
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
@@ -4277,7 +4385,7 @@ const styles = {
   bank3177SummaryCard: {
     minWidth: "135px",
     padding: "8px 10px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     background: "rgba(15,23,42,0.78)",
     border: "1px solid rgba(147,197,253,0.24)",
     color: "#e5e7eb",
@@ -4294,7 +4402,7 @@ const styles = {
     color: "#ffffff",
     fontSize: "24px",
     fontWeight: "950",
-    letterSpacing: "1px",
+    letterSpacing: "0.2px",
     textShadow: "0 2px 0 rgba(0,0,0,0.40)",
   },
 
@@ -4322,7 +4430,7 @@ const styles = {
     height: "calc(100vh - 305px)",
     minHeight: "390px",
     margin: "0 auto",
-    borderRadius: "14px",
+    borderRadius: "10px",
     border: "1px solid rgba(147,197,253,0.42)",
     background: "linear-gradient(180deg, #f8fafc 0%, #ffffff 100%)",
     overflow: "hidden",
@@ -4333,7 +4441,7 @@ const styles = {
 
   transferButton: {
     minWidth: "72px",
-    height: "28px",
+    height: "34px",
     borderRadius: "9px",
     border: "1px solid #93c5fd",
     background: "#eaf3ff",
@@ -4449,7 +4557,7 @@ const styles = {
 
   clearXRowButton: {
     minWidth: "58px",
-    height: "28px",
+    height: "34px",
     padding: "0 10px",
     borderRadius: "10px",
     border: "1px solid rgba(56,189,248,0.58)",
@@ -4474,7 +4582,7 @@ const styles = {
   compactAddButton: {
     height: "36px",
     padding: "0 16px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(250,204,21,0.52)",
     background: "linear-gradient(180deg, #facc15 0%, #ca8a04 100%)",
     color: "#111827",
@@ -4598,7 +4706,7 @@ const styles = {
     color: "#67e8f9",
     fontSize: "11px",
     fontWeight: "950",
-    letterSpacing: "1px",
+    letterSpacing: "0.2px",
     textTransform: "uppercase",
     whiteSpace: "nowrap",
   },
@@ -4741,7 +4849,7 @@ const styles = {
     maxWidth: "1520px",
     margin: "0 auto",
     padding: "9px",
-    borderRadius: "20px",
+    borderRadius: "10px",
     background: "linear-gradient(135deg, rgba(8,22,40,0.98), rgba(15,23,42,0.88))",
     border: "1px solid rgba(56,189,248,0.34)",
     boxShadow: "0 -8px 34px rgba(0,0,0,0.45), 0 0 28px rgba(34,211,238,0.16), inset 0 1px 0 rgba(255,255,255,0.10)",
@@ -4786,7 +4894,7 @@ const styles = {
   blankAccountCard: {
     width: "min(760px, 92vw)",
     padding: "30px",
-    borderRadius: "24px",
+    borderRadius: "16px",
     background: "linear-gradient(180deg, #ffffff, #f1f5f9)",
     border: "1px solid rgba(15,23,42,0.10)",
     boxShadow: "0 22px 60px rgba(15,23,42,0.12)",
@@ -4819,7 +4927,7 @@ const styles = {
 
   echeanceEditButton: {
     minWidth: "42px",
-    height: "28px",
+    height: "34px",
     padding: "0 10px",
     borderRadius: "8px",
     border: "1px solid #93c5fd",
@@ -4890,7 +4998,7 @@ const styles = {
     color: "#67e8f9",
     fontSize: "11px",
     fontWeight: "950",
-    letterSpacing: "1px",
+    letterSpacing: "0.2px",
     textTransform: "uppercase",
     cursor: "grab",
   },
@@ -4912,7 +5020,7 @@ const styles = {
     position: "relative",
     width: "460px",
     padding: "28px",
-    borderRadius: "20px",
+    borderRadius: "10px",
     background: "linear-gradient(180deg, rgba(8, 22, 40, 0.96), rgba(3, 7, 18, 0.98))",
     border: "1px solid rgba(56,189,248,0.28)",
     boxShadow: "0 22px 60px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.08)",
@@ -5008,7 +5116,7 @@ const styles = {
     background: "linear-gradient(180deg, #7f1d1d 0%, #450a0a 100%)",
     color: "white",
     border: "1px solid rgba(248,113,113,0.48)",
-    borderRadius: "12px",
+    borderRadius: "8px",
     fontWeight: "900",
     fontSize: "12px",
     cursor: "pointer",
@@ -5038,7 +5146,7 @@ const styles = {
     position: "relative",
     width: "58px",
     height: "42px",
-    borderRadius: "14px",
+    borderRadius: "10px",
     background:
       "linear-gradient(135deg, #facc15 0%, #eab308 36%, #0ea5e9 100%)",
     border: "1px solid rgba(250,204,21,0.58)",
@@ -5114,7 +5222,7 @@ const styles = {
   titleIcon: {
     width: "46px",
     height: "46px",
-    borderRadius: "14px",
+    borderRadius: "10px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -5183,7 +5291,7 @@ const styles = {
     width: "720px",
     maxWidth: "92vw",
     padding: "24px",
-    borderRadius: "24px",
+    borderRadius: "16px",
     background: "linear-gradient(180deg, rgba(8, 22, 40, 0.98), rgba(3, 7, 18, 0.98))",
     border: "1px solid rgba(56, 189, 248, 0.32)",
     boxShadow: "0 25px 80px rgba(0,0,0,0.65), 0 0 40px rgba(56,189,248,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
@@ -5261,7 +5369,7 @@ const styles = {
   guideIcon: {
     width: "34px",
     height: "34px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -5281,7 +5389,7 @@ const styles = {
 
   guidePrimary: {
     padding: "12px 16px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(34,197,94,0.40)",
     background: "linear-gradient(180deg, #22c55e, #15803d)",
     color: "#ffffff",
@@ -5294,7 +5402,7 @@ const styles = {
     height: "44px",
     minWidth: "86px",
     padding: "5px 12px",
-    borderRadius: "14px",
+    borderRadius: "10px",
     border: "1px solid rgba(248,113,113,0.45)",
     background: "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)",
     color: "#ffffff",
@@ -5314,7 +5422,7 @@ const styles = {
   dateMiniBox: {
     height: "44px",
     padding: "6px 12px",
-    borderRadius: "14px",
+    borderRadius: "10px",
     border: "1px solid rgba(56,189,248,0.22)",
     background: "rgba(15,23,42,0.72)",
     color: "#e2e8f0",
@@ -5331,25 +5439,25 @@ const styles = {
   calendarOverlay: {position: "fixed", inset: 0, zIndex: 10030, display: "flex", alignItems: "center", justifyContent: "center",
     textAlign: "center", background: "rgba(2, 6, 23, 0.70)", backdropFilter: "blur(10px)"},
 
-  calendarPanel: {width: "760px", maxWidth: "94vw", padding: "22px", borderRadius: "24px", background: "linear-gradient(180deg, rgba(8,22,40,0.98), rgba(3,7,18,0.98))", border: "1px solid rgba(56,189,248,0.32)", boxShadow: "0 25px 80px rgba(0,0,0,0.65), 0 0 40px rgba(56,189,248,0.14), inset 0 1px 0 rgba(255,255,255,0.08)", color: "#f8fafc"},
+  calendarPanel: {width: "760px", maxWidth: "94vw", padding: "22px", borderRadius: "16px", background: "linear-gradient(180deg, rgba(8,22,40,0.98), rgba(3,7,18,0.98))", border: "1px solid rgba(56,189,248,0.32)", boxShadow: "0 25px 80px rgba(0,0,0,0.65), 0 0 40px rgba(56,189,248,0.14), inset 0 1px 0 rgba(255,255,255,0.08)", color: "#f8fafc"},
 
   calendarHeader: {display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "14px"},
 
   calendarKicker: {color: "#67e8f9", fontSize: "12px", fontWeight: "950", letterSpacing: "2px", textTransform: "uppercase", marginBottom: "5px"},
 
-  calendarClose: {width: "34px", height: "34px", borderRadius: "10px", border: "1px solid rgba(148,163,184,0.22)", background: "rgba(15,23,42,0.85)", color: "#e2e8f0", cursor: "pointer", fontSize: "22px"},
+  calendarClose: {width: "34px", height: "28px", borderRadius: "10px", border: "1px solid rgba(148,163,184,0.22)", background: "rgba(15,23,42,0.85)", color: "#e2e8f0", cursor: "pointer", fontSize: "22px"},
 
   calendarActions: {display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", marginBottom: "14px"},
 
-  calendarNavButton: {padding: "10px 12px", borderRadius: "12px", border: "1px solid rgba(56,189,248,0.30)", background: "linear-gradient(180deg, #0ea5e9, #075985)", color: "#fff", fontWeight: "900", cursor: "pointer"},
+  calendarNavButton: {padding: "7px 10px", borderRadius: "8px", border: "1px solid rgba(56,189,248,0.30)", background: "linear-gradient(180deg, #0ea5e9, #075985)", color: "#fff", fontWeight: "900", cursor: "pointer"},
 
-  calendarWeekBadge: {padding: "10px 14px", borderRadius: "14px", background: "linear-gradient(180deg, rgba(239,68,68,0.95), rgba(153,27,27,0.95))", border: "1px solid rgba(248,113,113,0.45)", color: "#fff", fontWeight: "900", boxShadow: "0 0 16px rgba(239,68,68,0.25)"},
+  calendarWeekBadge: {padding: "7px 10px", borderRadius: "10px", background: "linear-gradient(180deg, rgba(239,68,68,0.95), rgba(153,27,27,0.95))", border: "1px solid rgba(248,113,113,0.45)", color: "#fff", fontWeight: "900", boxShadow: "0 0 16px rgba(239,68,68,0.25)"},
 
   calendarDaysHeader: {display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px", marginBottom: "6px", color: "#93c5fd", fontWeight: "950", fontSize: "12px", textAlign: "center", textTransform: "uppercase"},
 
   calendarGrid: {display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "6px"},
 
-  calendarDay: {height: "64px", borderRadius: "14px", border: "1px solid rgba(148,163,184,0.14)", background: "linear-gradient(180deg, rgba(15,23,42,0.88), rgba(8,22,40,0.88))", color: "#f8fafc", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+  calendarDay: {height: "64px", borderRadius: "10px", border: "1px solid rgba(148,163,184,0.14)", background: "linear-gradient(180deg, rgba(15,23,42,0.88), rgba(8,22,40,0.88))", color: "#f8fafc", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
     textAlign: "center", gap: "5px", fontWeight: "900", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)"},
 
   calendarToday: {border: "1px solid rgba(250,204,21,0.78)", background: "linear-gradient(180deg, rgba(250,204,21,0.95), rgba(184,134,11,0.95))", color: "#111827", boxShadow: "0 0 20px rgba(250,204,21,0.28)"},
@@ -5360,7 +5468,7 @@ const styles = {
 
   calendarWeekSmall: {fontSize: "11px", opacity: 0.78},
 
-  calendarFooter: {marginTop: "14px", padding: "11px", borderRadius: "14px", background: "rgba(56,189,248,0.08)", border: "1px solid rgba(56,189,248,0.16)", color: "#cbd5e1", fontSize: "13px", fontWeight: "800", textAlign: "center"},
+  calendarFooter: {marginTop: "14px", padding: "11px", borderRadius: "10px", background: "rgba(56,189,248,0.08)", border: "1px solid rgba(56,189,248,0.16)", color: "#cbd5e1", fontSize: "13px", fontWeight: "800", textAlign: "center"},
 
   modalOverlay: {
     position: "fixed",
@@ -5378,7 +5486,7 @@ const styles = {
     position: "relative",
     width: "460px",
     padding: "22px",
-    borderRadius: "20px",
+    borderRadius: "10px",
     background: "linear-gradient(180deg, rgba(8, 22, 40, 0.98), rgba(3, 7, 18, 0.98))",
     border: "1px solid rgba(56, 189, 248, 0.30)",
     boxShadow: "0 25px 80px rgba(0,0,0,0.65), 0 0 35px rgba(56,189,248,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
@@ -5438,7 +5546,7 @@ const styles = {
   modalWarning: {
     position: "relative",
     padding: "12px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     background: "rgba(239, 68, 68, 0.10)",
     border: "1px solid rgba(239, 68, 68, 0.25)",
     color: "#fecaca",
@@ -5481,7 +5589,7 @@ const styles = {
   },
 
   cancelResetButton: {
-    padding: "10px 14px",
+    padding: "7px 10px",
     borderRadius: "11px",
     border: "1px solid rgba(148,163,184,0.25)",
     background: "linear-gradient(180deg, #334155, #0f172a)",
@@ -5584,7 +5692,7 @@ const styles = {
     background: "linear-gradient(180deg, #22c55e 0%, #15803d 100%)",
     color: "white",
     border: "1px solid rgba(34, 197, 94, 0.48)",
-    borderRadius: "12px",
+    borderRadius: "8px",
     fontWeight: "900",
     fontSize: "12px",
     cursor: "pointer",
@@ -5596,7 +5704,7 @@ const styles = {
     background: "linear-gradient(180deg, #0ea5e9 0%, #075985 100%)",
     color: "#f0f9ff",
     border: "1px solid rgba(103, 232, 249, 0.46)",
-    borderRadius: "12px",
+    borderRadius: "8px",
     fontWeight: "900",
     fontSize: "12px",
     cursor: "pointer",
@@ -5608,7 +5716,7 @@ const styles = {
     background: "linear-gradient(180deg, #f97316 0%, #991b1b 100%)",
     color: "#ffffff",
     border: "1px solid rgba(251, 146, 60, 0.50)",
-    borderRadius: "12px",
+    borderRadius: "8px",
     fontWeight: "900",
     fontSize: "12px",
     cursor: "pointer",
@@ -5668,13 +5776,13 @@ const styles = {
     fontSize: "13px",
     padding: "16px",
     background: "rgba(15, 23, 42, 0.55)",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(148,163,184,0.14)",
   },
 
   tmCurrentCard: {
     padding: "14px",
-    borderRadius: "14px",
+    borderRadius: "10px",
     background: "linear-gradient(135deg, rgba(14,165,233,0.18), rgba(250,204,21,0.12))",
     border: "1px solid rgba(56,189,248,0.22)",
     marginBottom: "14px",
@@ -5713,7 +5821,7 @@ const styles = {
 
   tmSliderWrap: {
     padding: "12px",
-    borderRadius: "14px",
+    borderRadius: "10px",
     background: "rgba(15, 23, 42, 0.58)",
     border: "1px solid rgba(148,163,184,0.14)",
     marginBottom: "12px",
@@ -5759,7 +5867,7 @@ const styles = {
 
   tmPreview: {
     padding: "12px",
-    borderRadius: "14px",
+    borderRadius: "10px",
     background: "rgba(2, 6, 23, 0.58)",
     border: "1px solid rgba(148,163,184,0.14)",
     marginBottom: "12px",
@@ -5797,7 +5905,7 @@ const styles = {
     background: "linear-gradient(180deg, #22c55e, #15803d)",
     color: "white",
     border: "none",
-    borderRadius: "12px",
+    borderRadius: "8px",
     fontWeight: "900",
     cursor: "pointer",
     boxShadow: "0 0 18px rgba(34,197,94,0.25)",
@@ -5813,7 +5921,7 @@ const styles = {
   card: {
     background: "#0c1c3b",
     padding: "18px",
-    borderRadius: "14px",
+    borderRadius: "10px",
     textAlign: "center",
     boxShadow: "0 0 22px rgba(0,255,200,0.18)",
     border: "1px solid rgba(0,255,200,0.35)",
@@ -5860,7 +5968,7 @@ const styles = {
     color: "#67e8f9",
     fontSize: "11px",
     fontWeight: "950",
-    letterSpacing: "1px",
+    letterSpacing: "0.2px",
     textTransform: "uppercase",
     whiteSpace: "nowrap",
   },
@@ -5997,7 +6105,7 @@ const styles = {
     alignItems: "center",
     gap: "12px",
     padding: "12px",
-    borderRadius: "20px",
+    borderRadius: "10px",
     background: "linear-gradient(135deg, rgba(8,22,40,0.88), rgba(15,23,42,0.66))",
     border: "1px solid rgba(56,189,248,0.22)",
     backdropFilter: "blur(12px)",
@@ -6018,7 +6126,7 @@ const styles = {
     color: "#67e8f9",
     fontSize: "10px",
     fontWeight: "950",
-    letterSpacing: "1px",
+    letterSpacing: "0.2px",
     textTransform: "uppercase",
     whiteSpace: "nowrap",
   },
@@ -6315,7 +6423,7 @@ const styles = {
   assistantTeslaButton: {
     height: "38px",
     padding: "0 18px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(103, 232, 249, 0.46)",
     background: "linear-gradient(180deg, #0ea5e9 0%, #075985 100%)",
     color: "#f0f9ff",
@@ -6431,7 +6539,7 @@ const styles = {
     background: "linear-gradient(180deg, #facc15 0%, #ca8a04 100%)",
     color: "#111827",
     border: "1px solid rgba(250,204,21,0.52)",
-    borderRadius: "12px",
+    borderRadius: "8px",
     fontWeight: "950",
     cursor: "pointer",
     boxShadow: "0 0 14px rgba(250,204,21,0.20), inset 0 1px 0 rgba(255,255,255,0.22)",
@@ -6578,7 +6686,7 @@ const styles = {
     borderRight: "1px solid rgba(15, 23, 42, 0.16)",
     borderBottom: "1px solid rgba(15, 23, 42, 0.16)",
     padding: "4px 6px",
-    height: "28px",
+    height: "34px",
     textAlign: "center",
     color: "#0f172a",
     fontSize: "12px",
@@ -6666,7 +6774,7 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.28)",
     borderRadius: "10px",
     width: "34px",
-    height: "28px",
+    height: "34px",
     cursor: "pointer",
     fontSize: "15px",
     fontWeight: "900",
@@ -6718,7 +6826,7 @@ const styles = {
     marginBottom: "6px",
     background: "linear-gradient(180deg, rgba(8, 22, 40, 0.96), rgba(3, 7, 18, 0.98))",
     border: "1px solid rgba(56,189,248,0.24)",
-    borderRadius: "14px",
+    borderRadius: "10px",
     boxShadow: "0 -10px 30px rgba(0,0,0,0.30), inset 0 1px 0 rgba(255,255,255,0.06)",
   },
 
@@ -6766,9 +6874,9 @@ const styles = {
   },
 
   passwordChangeButton: {
-    height: "28px",
+    height: "34px",
     padding: "0 10px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(56,189,248,0.34)",
     background: "linear-gradient(180deg, rgba(14,165,233,0.35), rgba(2,6,23,0.58))",
     color: "#e0f2fe",
@@ -6827,8 +6935,8 @@ const styles = {
 
   passwordSuccess: {
     marginTop: "12px",
-    padding: "10px 12px",
-    borderRadius: "12px",
+    padding: "7px 10px",
+    borderRadius: "8px",
     background: "rgba(34,197,94,0.14)",
     border: "1px solid rgba(34,197,94,0.35)",
     color: "#86efac",
@@ -6839,7 +6947,7 @@ const styles = {
   incomeButton: {
     height: "42px",
     padding: "0 18px",
-    borderRadius: "14px",
+    borderRadius: "10px",
     border: "1px solid rgba(34,197,94,0.48)",
     background: "linear-gradient(180deg, #22c55e 0%, #15803d 100%)",
     color: "#ffffff",
@@ -6864,7 +6972,7 @@ const styles = {
     minWidth: "150px",
     height: "42px",
     padding: "0 16px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(255,255,255,0.22)",
     background: "linear-gradient(180deg, #22c55e 0%, #15803d 100%)",
     color: "#ffffff",
@@ -6906,7 +7014,7 @@ const styles = {
   incomeToolbar: {
     display: "flex",
     justifyContent: "center",
-    padding: "10px 12px",
+    padding: "7px 10px",
     background: "#f8fafc",
     borderBottom: "2px solid #000000",
   },
@@ -7057,14 +7165,14 @@ const styles = {
     fontWeight: "950",
     textTransform: "uppercase",
     color: "#67e8f9",
-    letterSpacing: "1px",
+    letterSpacing: "0.2px",
     flex: "0 0 auto",
   },
 
   incomeSelect: {
     height: "36px",
     minWidth: "330px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.55)",
     background: "#ffffff",
     color: "#020617",
@@ -7076,7 +7184,7 @@ const styles = {
   incomeTextInput: {
     height: "36px",
     minWidth: "210px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
     color: "#020617",
@@ -7088,7 +7196,7 @@ const styles = {
   incomeAmountInput: {
     height: "36px",
     width: "130px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
     color: "#020617",
@@ -7100,7 +7208,7 @@ const styles = {
   incomeModeSelect: {
     height: "36px",
     width: "135px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
     color: "#020617",
@@ -7112,7 +7220,7 @@ const styles = {
   incomeDateInput: {
     height: "36px",
     width: "150px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
     color: "#020617",
@@ -7257,7 +7365,7 @@ const styles = {
 
   incomeMirrorDescInput: {
     width: "100%",
-    height: "28px",
+    height: "34px",
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     background: "#ffffff",
@@ -7319,7 +7427,7 @@ const styles = {
     color: "#020617",
     fontSize: "12px",
     fontWeight: "950",
-    letterSpacing: "1px",
+    letterSpacing: "0.2px",
     textTransform: "uppercase",
   },
 
@@ -7330,11 +7438,11 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     padding: "0 14px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     background: "#020617",
     color: "#86efac",
-    fontSize: "18px",
-    fontWeight: "950",
+    fontSize: "13px",
+    fontWeight: "900",
     boxShadow: "0 0 16px rgba(34,197,94,0.30)",
   },
 
@@ -7446,7 +7554,7 @@ const styles = {
 
   standardMirrorDescInput: {
     width: "100%",
-    height: "28px",
+    height: "34px",
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     background: "#ffffff",
@@ -7496,7 +7604,7 @@ const styles = {
 
   standardMirrorDeleteButton: {
     width: "32px",
-    height: "28px",
+    height: "34px",
     borderRadius: "9px",
     border: "1px solid rgba(255,255,255,0.25)",
     background: "linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)",
@@ -7527,7 +7635,7 @@ const styles = {
     color: "#020617",
     fontSize: "12px",
     fontWeight: "950",
-    letterSpacing: "1px",
+    letterSpacing: "0.2px",
     textTransform: "uppercase",
   },
 
@@ -7538,11 +7646,11 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     padding: "0 14px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     background: "#020617",
     color: "#86efac",
-    fontSize: "18px",
-    fontWeight: "950",
+    fontSize: "13px",
+    fontWeight: "900",
     boxShadow: "0 0 16px rgba(34,197,94,0.30)",
   },
 
@@ -7568,7 +7676,7 @@ const styles = {
   entreeCleanSelect: {
     height: "38px",
     minWidth: "380px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.55)",
     background: "#ffffff",
     color: "#020617",
@@ -7580,7 +7688,7 @@ const styles = {
   entreeCleanTextInput: {
     height: "38px",
     minWidth: "220px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
     color: "#020617",
@@ -7592,7 +7700,7 @@ const styles = {
   entreeCleanAmountInput: {
     height: "38px",
     width: "135px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
     color: "#020617",
@@ -7681,7 +7789,7 @@ const styles = {
 
   entreeCleanDescInput: {
     width: "100%",
-    height: "28px",
+    height: "34px",
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     background: "#ffffff",
@@ -7743,7 +7851,7 @@ const styles = {
   entreeCleanModeSelect: {
     height: "38px",
     width: "135px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
     color: "#020617",
@@ -7831,7 +7939,7 @@ const styles = {
 
   entreeCleanEditButton: {
     width: "32px",
-    height: "28px",
+    height: "34px",
     borderRadius: "9px",
     border: "1px solid #bae6fd",
     background: "linear-gradient(180deg, #e0f2fe, #bae6fd)",
@@ -7884,7 +7992,7 @@ const styles = {
   entreeUltraSelect: {
     height: "38px",
     minWidth: "380px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.55)",
     background: "#ffffff",
     color: "#020617",
@@ -7896,7 +8004,7 @@ const styles = {
   entreeUltraTextInput: {
     height: "38px",
     minWidth: "220px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
     color: "#020617",
@@ -7908,7 +8016,7 @@ const styles = {
   entreeUltraAmountInput: {
     height: "38px",
     width: "135px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
     color: "#020617",
@@ -7920,7 +8028,7 @@ const styles = {
   entreeUltraModeSelect: {
     height: "38px",
     width: "135px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
     color: "#020617",
@@ -8084,7 +8192,7 @@ const styles = {
     color: "#020617",
     fontSize: "12px",
     fontWeight: "950",
-    letterSpacing: "1px",
+    letterSpacing: "0.2px",
     textTransform: "uppercase",
     whiteSpace: "nowrap",
   },
@@ -8096,11 +8204,11 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     padding: "0 14px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     background: "#020617",
     color: "#86efac",
-    fontSize: "18px",
-    fontWeight: "950",
+    fontSize: "13px",
+    fontWeight: "900",
     boxShadow: "0 0 16px rgba(34,197,94,0.30)",
   },
 
@@ -8247,7 +8355,7 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     gap: "6px",
-    borderRadius: "12px",
+    borderRadius: "8px",
     background: "#020617",
     color: "#86efac",
     boxShadow: "0 0 16px rgba(34,197,94,0.30)",
@@ -8273,33 +8381,62 @@ const styles = {
   ultraBankInScroll: {
     position: "sticky",
     left: "0",
-    width: "min(1160px, calc(100vw - 48px))",
-    margin: "26px auto 0 auto",
-    padding: "18px 20px 28px 20px",
-    background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
-    border: "1px solid rgba(148,163,184,0.55)",
-    borderRadius: "20px",
-    boxShadow: "0 18px 45px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.95)",
+    width: "fit-content",
+    maxWidth: "none",
+    margin: "26px 0 0 0",
+    padding: "0",
+    background: "transparent",
+    border: "0",
+    borderRadius: "0",
+    boxShadow: "none",
     zIndex: 5,
+    overflow: "visible",
   },
 
   ultraBankSummaryShell: {
-    width: "100%",
-    margin: "0 auto",
-    padding: "0",
+    position: "relative",
+    width: "820px",
+    maxWidth: "820px",
+    margin: "18px auto 36px auto",
+    padding: "14px 18px 18px 18px",
     color: "#020617",
-    fontFamily: "Arial, Helvetica, sans-serif",
-    background: "transparent",
+    cursor: "grab",
+    userSelect: "none",
+    fontFamily: "Arial, sans-serif",
+    background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+    border: "1px solid #cbd5e1",
+    borderRadius: "16px",
+    boxShadow: "0 24px 55px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.95)",
+    boxSizing: "border-box",
+  },
+
+  ultraBankResetPositionButton: {
+    position: "absolute",
+    top: "14px",
+    right: "16px",
+    width: "34px",
+    height: "34px",
+    borderRadius: "999px",
+    border: "1px solid rgba(148,163,184,0.75)",
+    background: "linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)",
+    color: "#0f172a",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 8px 18px rgba(15,23,42,0.14)",
+    zIndex: 3,
   },
 
   ultraBankMiniGrid: {
     display: "grid",
-    gridTemplateColumns: "minmax(520px, 1fr) 96px 96px 96px",
+    gridTemplateColumns: "1fr 120px 120px 120px",
     alignItems: "stretch",
-    border: "1px solid #020617",
-    borderBottom: "0",
+    width: "760px",
+    maxWidth: "760px",
+    margin: "0 auto",
+    border: "2px solid #020617",
     background: "#fff",
     overflow: "hidden",
+    boxSizing: "border-box",
     boxShadow: "0 10px 22px rgba(15,23,42,0.08)",
   },
 
@@ -8307,15 +8444,16 @@ const styles = {
     background: "linear-gradient(180deg, #020617 0%, #000000 100%)",
     color: "#fff",
     fontWeight: "950",
-    fontSize: "13px",
-    padding: "8px 10px",
-    borderRight: "1px solid #000",
+    fontSize: "17px",
+    padding: "15px 16px",
+    borderRight: "2px solid #000",
+    letterSpacing: "0.2px",
   },
 
   ultraBankBlackSpacer: {
-    background: "#000",
-    borderTop: "1px solid #000",
-    borderRight: "1px solid #000",
+    background: "#fff",
+    borderTop: "2px solid #000",
+    borderRight: "2px solid #000",
   },
 
   ultraBankBlackHead: {
@@ -8324,8 +8462,9 @@ const styles = {
     fontWeight: "950",
     fontSize: "12px",
     textAlign: "center",
-    padding: "8px 6px",
-    borderLeft: "1px solid #000",
+    padding: "7px 8px",
+    borderLeft: "2px solid #000",
+    letterSpacing: "0.2px",
   },
 
   ultraBankBlackHeadLeft: {
@@ -8333,47 +8472,57 @@ const styles = {
     color: "#fff",
     fontWeight: "950",
     fontSize: "12px",
-    padding: "8px 10px",
+    padding: "7px 10px",
+    letterSpacing: "0.2px",
   },
 
   ultraBankWhiteValue: {
     background: "#fff",
     color: "#000",
-    fontWeight: "850",
-    fontSize: "12px",
+    fontWeight: "950",
+    fontSize: "13px",
     textAlign: "right",
-    padding: "7px 8px",
-    borderLeft: "1px solid #000",
-    borderBottom: "1px solid #000",
+    padding: "7px 10px",
+    borderLeft: "2px solid #000",
+    borderTop: "2px solid #000",
     whiteSpace: "nowrap",
   },
 
   ultraBankSectionTitle: {
-    background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #60a5fa 100%)",
-    border: "1px solid rgba(15,23,42,0.9)",
+    width: "760px",
+    maxWidth: "760px",
+    margin: "0 auto",
+    boxSizing: "border-box",
+    background: "linear-gradient(135deg, #4338ca 0%, #2563eb 48%, #60a5fa 100%)",
+    border: "2px solid rgba(15,23,42,0.9)",
     borderBottom: "0",
     textAlign: "center",
     fontWeight: "950",
-    fontSize: "20px",
-    padding: "13px 8px",
+    fontSize: "13px",
+    padding: "7px 8px",
     color: "#ffffff",
-    letterSpacing: "0.9px",
+    letterSpacing: "0.2px",
     textTransform: "uppercase",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.32), 0 10px 22px rgba(37,99,235,0.18)",
+    textShadow: "0 2px 4px rgba(0,0,0,0.35)",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.42), 0 12px 24px rgba(37,99,235,0.18)",
   },
 
   ultraBankBenefTitle: {
-    marginTop: "22px",
-    background: "linear-gradient(135deg, #1d4ed8 0%, #2563eb 50%, #60a5fa 100%)",
-    border: "1px solid rgba(15,23,42,0.9)",
+    width: "760px",
+    maxWidth: "760px",
+    margin: "18px auto 0 auto",
+    boxSizing: "border-box",
+    background: "linear-gradient(135deg, #4338ca 0%, #2563eb 48%, #60a5fa 100%)",
+    border: "2px solid rgba(15,23,42,0.9)",
     borderBottom: "0",
     textAlign: "center",
     fontWeight: "950",
-    fontSize: "20px",
-    padding: "13px 8px",
+    fontSize: "13px",
+    padding: "7px 8px",
     color: "#ffffff",
-    letterSpacing: "0.9px",
+    letterSpacing: "0.2px",
     textTransform: "uppercase",
+    textShadow: "0 2px 4px rgba(0,0,0,0.35)",
   },
 
   ultraBankTotalLabel: {
@@ -8382,50 +8531,70 @@ const styles = {
     fontWeight: "950",
     fontSize: "12px",
     padding: "7px 10px",
-    borderBottom: "1px solid #000",
+    borderTop: "2px solid #000",
   },
 
   ultraBankBottomZone: {
-    width: "min(660px, 100%)",
-    margin: "26px auto 0 auto",
+    width: "760px",
+    maxWidth: "760px",
+    boxSizing: "border-box",
+    margin: "22px auto 10px auto",
     display: "grid",
     gridTemplateColumns: "1fr",
-    gap: "11px",
+    gap: "12px",
     fontSize: "13px",
-    fontWeight: "850",
-    padding: "24px 22px",
+    fontWeight: "900",
+    padding: "22px 32px",
     background: "linear-gradient(180deg, rgba(248,250,252,0.98) 0%, rgba(241,245,249,0.98) 100%)",
-    border: "1px solid rgba(148,163,184,0.62)",
-    borderRadius: "18px",
-    boxShadow: "0 16px 34px rgba(15,23,42,0.10), inset 0 1px 0 rgba(255,255,255,0.95)",
+    border: "2px solid rgba(148,163,184,0.70)",
+    borderRadius: "10px",
+    boxShadow: "0 24px 48px rgba(15,23,42,0.13), inset 0 1px 0 rgba(255,255,255,0.95)",
   },
 
   ultraBankSoldeText: {
     textAlign: "center",
     fontWeight: "950",
+    fontSize: "13px",
     color: "#000",
+    marginBottom: "8px",
   },
 
   ultraBankBankLine: {
     display: "grid",
-    gridTemplateColumns: "1fr 145px",
+    gridTemplateColumns: "54px 1fr 170px",
     alignItems: "center",
-    gap: "12px",
-    color: "#000",
+    gap: "14px",
+    color: "#020617",
+    borderBottom: "1px solid rgba(203,213,225,0.80)",
+    paddingBottom: "10px",
+  },
+
+  ultraBankIconBox: {
+    width: "42px",
+    height: "42px",
+    borderRadius: "12px",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "linear-gradient(180deg, #ffffff 0%, #eff6ff 100%)",
+    border: "2px solid #cbd5e1",
+    boxShadow: "0 8px 18px rgba(15,23,42,0.12)",
+    fontSize: "20px",
   },
 
   ultraBankInput: {
-    width: "140px",
-    height: "28px",
+    width: "170px",
+    height: "34px",
     background: "linear-gradient(180deg, #f8fafc 0%, #e5e7eb 100%)",
-    border: "1px solid #cbd5e1",
+    border: "2px solid #cbd5e1",
     borderRadius: "8px",
     color: "#020617",
     textAlign: "right",
     fontWeight: "950",
-    padding: "0 10px",
+    fontSize: "14px",
+    padding: "0 12px",
     boxSizing: "border-box",
-    boxShadow: "inset 0 1px 2px rgba(15,23,42,0.10), 0 3px 10px rgba(15,23,42,0.08)",
+    boxShadow: "inset 0 2px 4px rgba(15,23,42,0.12), 0 4px 12px rgba(15,23,42,0.10)",
     outline: "none",
   },
 
@@ -8433,11 +8602,12 @@ const styles = {
     color: "#020617",
     textAlign: "right",
     fontWeight: "950",
-    padding: "6px 10px",
+    fontSize: "14px",
+    padding: "7px 12px",
     background: "linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)",
-    border: "1px solid #cbd5e1",
+    border: "2px solid #cbd5e1",
     borderRadius: "8px",
-    boxShadow: "inset 0 1px 2px rgba(15,23,42,0.08)",
+    boxShadow: "inset 0 2px 4px rgba(15,23,42,0.10)",
   },
 
   ultraBankResult: {
@@ -8445,12 +8615,13 @@ const styles = {
     background: "linear-gradient(135deg, #020617 0%, #0f172a 55%, #1e3a8a 100%)",
     color: "#fff",
     borderRadius: "10px",
-    padding: "10px 12px",
+    padding: "12px 16px",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: "12px",
-    boxShadow: "0 8px 22px rgba(2,6,23,0.22)",
+    gap: "18px",
+    fontSize: "12px",
+    boxShadow: "0 12px 26px rgba(2,6,23,0.28)",
   },
 
 };

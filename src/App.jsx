@@ -261,6 +261,19 @@ function trierCategories(liste = []) {
   });
 }
 
+function trierLignesParDescription(liste = []) {
+  return [...liste].sort((a, b) => {
+    const da = String(a?.description || "").trim();
+    const db = String(b?.description || "").trim();
+
+    return da.localeCompare(db, "fr", {
+      sensitivity: "base",
+      ignorePunctuation: true,
+      numeric: true,
+    });
+  });
+}
+
 function semainesEnSerie(echeance) {
   const e = Number(echeance);
 
@@ -377,6 +390,8 @@ export default function App() {
   const [noteEdition, setNoteEdition] = useState("");
   const [valeurs3177, setValeurs3177] = useState({});
   const [input3177Actif, setInput3177Actif] = useState(null);
+  const [selectionXRange, setSelectionXRange] = useState(null);
+  const [lignesDesactivees, setLignesDesactivees] = useState({});
   const [revenusResume3185, setRevenusResume3185] = useState([]);
   const [banque3185, setBanque3185] = useState(() => {
     try {
@@ -1083,6 +1098,27 @@ export default function App() {
     return `budget_3177_valeurs_${getUserId() || "anonymous"}`;
   }
 
+  function getLignesDesactiveesStorageKey() {
+    return `budget_3185_lignes_desactivees_${getUserId() || "anonymous"}`;
+  }
+
+  function ligneEstActive(item) {
+    if (!item?.id) return true;
+    return lignesDesactivees[item.id] !== true;
+  }
+
+  function basculerLigneActive(item) {
+    if (!item?.id) return;
+
+    const nextValues = {
+      ...lignesDesactivees,
+      [item.id]: lignesDesactivees[item.id] !== true,
+    };
+
+    setLignesDesactivees(nextValues);
+    localStorage.setItem(getLignesDesactiveesStorageKey(), JSON.stringify(nextValues));
+  }
+
   useEffect(() => {
     if (!session?.user?.id) {
       setValeurs3177({});
@@ -1093,6 +1129,19 @@ export default function App() {
       setValeurs3177(JSON.parse(localStorage.getItem(getValeurs3177StorageKey()) || "{}"));
     } catch {
       setValeurs3177({});
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setLignesDesactivees({});
+      return;
+    }
+
+    try {
+      setLignesDesactivees(JSON.parse(localStorage.getItem(getLignesDesactiveesStorageKey()) || "{}"));
+    } catch {
+      setLignesDesactivees({});
     }
   }, [session?.user?.id]);
 
@@ -1196,8 +1245,13 @@ export default function App() {
     return semainesPayees(item).includes(semaine);
   }
 
-  function montantAccumule(item) {
+  function montantAccumuleBrut(item) {
     return semainesPayees(item).length * calculerMontants(item).semaine;
+  }
+
+  function montantAccumule(item) {
+    if (!ligneEstActive(item)) return 0;
+    return montantAccumuleBrut(item);
   }
 
   function balance(item) {
@@ -1613,14 +1667,55 @@ export default function App() {
   }
 
   async function toggleSemaine(item, semaine) {
-    setErreur("");
+    const idLigne = item?.id;
+    if (!idLigne) return;
 
-    let semainesListe = semainesPayees(item);
+    const semainesActuelles = semainesPayees(item).map(Number);
+    const semaineCliquee = Number(semaine);
+    let semainesListe = semainesActuelles;
 
-    if (semainesListe.includes(semaine)) {
-      semainesListe = semainesListe.filter((s) => s !== semaine);
+    const memeLigneSelectionnee =
+      selectionXRange &&
+      selectionXRange.id === idLigne &&
+      Number(selectionXRange.semaine) !== semaineCliquee;
+
+    // X AUTO PAR ORDRE VISUEL :
+    // On remplit selon l'ordre affiché à l'écran, pas selon l'ordre numérique.
+    // Exemple avec échéance 35 : 36, 37, 38...52, 1, 2...14.
+    // Si tu cliques 36 puis 14, l'app remplit toute cette séquence visible.
+    if (memeLigneSelectionnee) {
+      const semaineDepart = Number(selectionXRange.semaine);
+      const serieVisuelle = semainesAfficheesPourLigne(item).map(Number);
+      const indexDepart = serieVisuelle.indexOf(semaineDepart);
+      const indexFin = serieVisuelle.indexOf(semaineCliquee);
+      const semainesSet = new Set(semainesActuelles);
+
+      let plageSemaines = [];
+
+      if (indexDepart !== -1 && indexFin !== -1) {
+        const debutIndex = Math.min(indexDepart, indexFin);
+        const finIndex = Math.max(indexDepart, indexFin);
+        plageSemaines = serieVisuelle.slice(debutIndex, finIndex + 1);
+      } else {
+        // Sécurité : si une semaine n'est pas trouvée dans la ligne affichée,
+        // on garde l'ancien comportement numérique.
+        const debut = Math.min(semaineDepart, semaineCliquee);
+        const fin = Math.max(semaineDepart, semaineCliquee);
+        plageSemaines = Array.from({ length: fin - debut + 1 }, (_, i) => debut + i);
+      }
+
+      for (const s of plageSemaines) {
+        semainesSet.add(Number(s));
+      }
+
+      semainesListe = Array.from(semainesSet).sort((a, b) => a - b);
+      setSelectionXRange(null);
+    } else if (semainesActuelles.includes(semaineCliquee)) {
+      semainesListe = semainesActuelles.filter((s) => s !== semaineCliquee);
+      setSelectionXRange(null);
     } else {
-      semainesListe = [...semainesListe, semaine].sort((a, b) => a - b);
+      semainesListe = [...semainesActuelles, semaineCliquee].sort((a, b) => a - b);
+      setSelectionXRange({ id: idLigne, semaine: semaineCliquee });
     }
 
     enregistrerSnapshot("Avant modification calendrier");
@@ -1628,7 +1723,7 @@ export default function App() {
     const { error } = await supabase
       .from("budget_transactions")
       .update({ semaines_payees: semainesListe })
-      .eq("id", item.id);
+      .eq("id", idLigne);
 
     if (error) {
       setErreur(error.message);
@@ -1637,13 +1732,12 @@ export default function App() {
 
     setData((prev) =>
       prev.map((row) =>
-        row.id === item.id ? { ...row, semaines_payees: semainesListe } : row
+        row.id === idLigne ? { ...row, semaines_payees: semainesListe } : row
       )
     );
 
     if (semainesListe.length === 0) {
       resetTransfertSiTousXEffaces(item);
-      setErreur(`Tous les X ont été effacés pour "${item.description}". Le transfert pourra être refait seulement après avoir remis les 52 X.`);
     }
   }
 
@@ -1724,16 +1818,24 @@ export default function App() {
       acc[nomBloc].push(item);
     }
 
+    for (const bloc of Object.keys(acc)) {
+      acc[bloc] = trierLignesParDescription(acc[bloc]);
+    }
+
     return acc;
   }, [data]);
 
-  const lignesBlocActif = data.filter((item) => normaliserBloc(item.bloc) === normaliserBloc(blocActif));
+  const lignesBlocActif = trierLignesParDescription(
+    data.filter((item) => normaliserBloc(item.bloc) === normaliserBloc(blocActif))
+  );
 
   const groupesFiltres = useMemo(() => {
     const acc = {};
 
     for (const bloc of BLOCS_FIXES) {
-      const lignes = data.filter((item) => normaliserBloc(item.bloc) === bloc);
+      const lignes = trierLignesParDescription(
+        data.filter((item) => normaliserBloc(item.bloc) === bloc)
+      );
 
       if (lignes.length > 0) {
         acc[bloc] = lignes;
@@ -2084,7 +2186,9 @@ export default function App() {
     const lignesVisibles3185 = [];
 
     for (const bloc of BLOCS_FIXES) {
-      const lignesBloc = data.filter((item) => normaliserBloc(item.bloc) === bloc);
+      const lignesBloc = trierLignesParDescription(
+        data.filter((item) => normaliserBloc(item.bloc) === bloc)
+      );
       lignesVisibles3185.push(...lignesBloc);
     }
 
@@ -3657,7 +3761,9 @@ export default function App() {
                           const calcul = calculerMontants(item);
                           const isDepense = item.type === "depense";
                           const nbX = semainesPayees(item).length;
+                          const activeLigne = ligneEstActive(item);
                           const acc = montantAccumule(item);
+                          const accBrut = montantAccumuleBrut(item);
                           const bal = balance(item);
                           const serieSemaines = semainesAfficheesPourLigne(item);
 
@@ -3694,8 +3800,22 @@ export default function App() {
                                   ) : (
                                     <div style={styles.descriptionRowTools}>
                                       <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          basculerLigneActive(item);
+                                        }}
+                                        style={{
+                                          ...styles.toggleCompteButton,
+                                          ...(activeLigne ? styles.toggleCompteButtonOn : styles.toggleCompteButtonOff),
+                                        }}
+                                        title={activeLigne ? "Ligne active : incluse dans le total accumulé" : "Ligne désactivée : exclue du total accumulé"}
+                                      >
+                                        {activeLigne ? "ON" : "OFF"}
+                                      </button>
+                                      <button
                                         onClick={() => commencerEditionInfo(item)}
-                                        style={{ ...styles.descriptionEditButton, width: "100%" }}
+                                        style={{ ...styles.descriptionEditButton, flex: 1 }}
                                         title="Cliquer pour modifier la catégorie / note"
                                       >
                                         {item.description || "-"}
@@ -3853,7 +3973,21 @@ export default function App() {
                                   { rowSpan: 2 }
                                 )}
                                 {celluleFixe(nbX, 6, { verticalAlign: "middle" }, { rowSpan: 2 })}
-                                {celluleFixe(formatArgent(acc), 7, { ...styles.accumuleCell, verticalAlign: "middle" }, { rowSpan: 2 })}
+                                {celluleFixe(
+                                  formatArgent(acc),
+                                  7,
+                                  {
+                                    ...styles.accumuleCell,
+                                    ...(activeLigne ? {} : styles.accumuleCellDisabled),
+                                    verticalAlign: "middle",
+                                  },
+                                  {
+                                    rowSpan: 2,
+                                    title: activeLigne
+                                      ? "Montant accumulé comptabilisé dans le total"
+                                      : `Ligne désactivée : ${formatArgent(accBrut)} non comptabilisé`,
+                                  }
+                                )}
                                 {celluleFixe(
                                   <div style={{ ...styles.actionGroup, justifyContent: "center" }}>
                                     <button
@@ -3890,7 +4024,7 @@ export default function App() {
                                   return (
                                     <td
                                       key={`top-${item.id}-${semaine}`}
-                                      title={`Semaine ${semaine}`}
+                                      title={selectionXRange?.id === item.id ? `Clique pour remplir de la semaine ${selectionXRange.semaine} à ${semaine}` : `Semaine ${semaine}`}
                                       style={{
                                         ...styles.weekTopCell,
                                         background: payee
@@ -4547,8 +4681,7 @@ const styles = {
   descriptionRowTools: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: "8px",
+    gap: "6px",
     width: "100%",
   },
 
@@ -6686,11 +6819,39 @@ const styles = {
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
   },
 
+  toggleCompteButton: {
+    minWidth: "42px",
+    height: "24px",
+    borderRadius: "999px",
+    border: "1px solid rgba(15,23,42,0.14)",
+    color: "#ffffff",
+    fontSize: "10px",
+    fontWeight: "900",
+    cursor: "pointer",
+    boxShadow: "0 3px 8px rgba(15,23,42,0.18), inset 0 1px 0 rgba(255,255,255,0.30)",
+    flexShrink: 0,
+  },
+
+  toggleCompteButtonOn: {
+    background: "linear-gradient(135deg, #22c55e, #16a34a)",
+  },
+
+  toggleCompteButtonOff: {
+    background: "linear-gradient(135deg, #ef4444, #b91c1c)",
+  },
+
   accumuleCell: {
     background: "#f8fafc",
     color: "#0f172a",
     fontWeight: "650",
     borderLeft: "1px solid rgba(148,163,184,0.55)",
+  },
+
+  accumuleCellDisabled: {
+    background: "#fff1f2",
+    color: "#dc2626",
+    border: "1px solid rgba(248,113,113,0.75)",
+    fontWeight: "900",
   },
 
   redText: {
