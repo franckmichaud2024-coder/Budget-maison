@@ -220,7 +220,11 @@ function round2(val) {
 }
 
 function formatArgent(val) {
-  return `${round2(val).toFixed(2)} $`;
+  const n = round2(Number(val || 0));
+  return `${new Intl.NumberFormat("fr-CA", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n)} $`;
 }
 
 function formatNombreInput(val) {
