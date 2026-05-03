@@ -394,6 +394,7 @@ export default function App() {
   const [noteEdition, setNoteEdition] = useState("");
   const [valeurs3177, setValeurs3177] = useState({});
   const [input3177Actif, setInput3177Actif] = useState(null);
+  const [lignesManuelles3177, setLignesManuelles3177] = useState([]);
   const [selectionXRange, setSelectionXRange] = useState(null);
   const [lignesDesactivees, setLignesDesactivees] = useState({});
   const [revenusResume3185, setRevenusResume3185] = useState([]);
@@ -1102,6 +1103,10 @@ export default function App() {
     return `budget_3177_valeurs_${getUserId() || "anonymous"}`;
   }
 
+  function getLignesManuelles3177StorageKey() {
+    return `budget_3177_lignes_manuelles_${getUserId() || "anonymous"}`;
+  }
+
   function getLignesDesactiveesStorageKey() {
     return `budget_3185_lignes_desactivees_${getUserId() || "anonymous"}`;
   }
@@ -1133,6 +1138,20 @@ export default function App() {
       setValeurs3177(JSON.parse(localStorage.getItem(getValeurs3177StorageKey()) || "{}"));
     } catch {
       setValeurs3177({});
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setLignesManuelles3177([]);
+      return;
+    }
+
+    try {
+      const saved = JSON.parse(localStorage.getItem(getLignesManuelles3177StorageKey()) || "[]");
+      setLignesManuelles3177(Array.isArray(saved) ? saved : []);
+    } catch {
+      setLignesManuelles3177([]);
     }
   }, [session?.user?.id]);
 
@@ -2194,6 +2213,38 @@ export default function App() {
     localStorage.setItem(getValeurs3177StorageKey(), JSON.stringify(nextValues));
   }
 
+  function sauvegarderLignesManuelles3177(nextRows) {
+    setLignesManuelles3177(nextRows);
+    localStorage.setItem(getLignesManuelles3177StorageKey(), JSON.stringify(nextRows));
+  }
+
+  function ajouterLigneManuelle3177() {
+    const id = `manual-3177-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    sauvegarderLignesManuelles3177([
+      ...lignesManuelles3177,
+      { id, description: "Nouvelle ligne manuelle" },
+    ]);
+  }
+
+  function modifierDescriptionLigneManuelle3177(id, description) {
+    sauvegarderLignesManuelles3177(
+      lignesManuelles3177.map((row) =>
+        row.id === id ? { ...row, description } : row
+      )
+    );
+  }
+
+  function supprimerLigneManuelle3177(id) {
+    const ok = window.confirm("Supprimer cette ligne manuelle du compte 3177 ?");
+    if (!ok) return;
+
+    sauvegarderLignesManuelles3177(lignesManuelles3177.filter((row) => row.id !== id));
+
+    const nextValues = { ...valeurs3177 };
+    delete nextValues[id];
+    sauvegarderValeurs3177(nextValues);
+  }
+
   function lireValeur3177(id, champ, defaut = 0) {
     const valeur = valeurs3177?.[id]?.[champ];
     return valeur === undefined || valeur === null || valeur === ""
@@ -2229,7 +2280,7 @@ export default function App() {
       lignesVisibles3185.push(...lignesBloc);
     }
 
-    return lignesVisibles3185.map((item, index) => {
+    const lignesSynchronisees = lignesVisibles3185.map((item, index) => {
       const id = item.id || `ligne-${index}`;
 
       // Correction : le 3177 commence à 0.
@@ -2255,8 +2306,33 @@ export default function App() {
         totalDepenses,
         solde,
         echeance: item.echeance || "",
+        manuel3177: false,
       };
     });
+
+    const lignesManuelles = lignesManuelles3177.map((item, manualIndex) => {
+      const id = item.id || `manual-3177-${manualIndex}`;
+      const gains = round2(lireValeur3177(id, "gains", 0));
+      const depenses = Array.from({ length: 7 }, (_, i) =>
+        round2(lireValeur3177(id, `depense${i + 1}`, 0))
+      );
+      const totalDepenses = round2(depenses.reduce((acc, val) => acc + Number(val || 0), 0));
+
+      return {
+        id,
+        index: lignesSynchronisees.length + manualIndex,
+        bloc: "MANUEL 3177",
+        description: item.description || "",
+        gains,
+        depenses,
+        totalDepenses,
+        solde: round2(gains - totalDepenses),
+        echeance: "",
+        manuel3177: true,
+      };
+    });
+
+    return [...lignesSynchronisees, ...lignesManuelles];
   }
 
   function renduInput3177(ligne, champ, valeur, align = "right") {
@@ -2724,10 +2800,19 @@ export default function App() {
               <div style={styles.bank3177Kicker}>Compte miroir automatique</div>
               <div style={styles.bank3177Title}>{compteArgentAccumule || compteActif}</div>
             </div>
+
+            <button
+              type="button"
+              onClick={ajouterLigneManuelle3177}
+              style={styles.bank3177ManualButton}
+              title="Ajouter une ligne uniquement dans Argent accumulé"
+            >
+              + Ligne manuelle
+            </button>
           </div>
 
           <div style={styles.bank3177Note}>
-            Les descriptions sont synchronisées automatiquement avec le compte <strong>{comptePrincipalBudget}</strong>. Tu peux modifier les gains et entrer jusqu’à 7 dépenses par ligne.
+            Les descriptions sont synchronisées automatiquement avec le compte <strong>{comptePrincipalBudget}</strong>. Les lignes manuelles restent seulement dans le compte 3177.
           </div>
 
           <div style={styles.bank3177TableWrap}>
@@ -2771,7 +2856,26 @@ export default function App() {
                       <tr key={ligne.id}>
                         <td style={{ ...styles.bank3177TdDescription, background: sectionColor }}>
                           <span style={styles.bank3177LineNumber}>{ligne.index + 1}</span>
-                          <span>{ligne.description}</span>
+                          {ligne.manuel3177 ? (
+                            <>
+                              <input
+                                value={ligne.description}
+                                onChange={(e) => modifierDescriptionLigneManuelle3177(ligne.id, e.target.value)}
+                                placeholder="Description manuelle"
+                                style={styles.bank3177ManualDescriptionInput}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => supprimerLigneManuelle3177(ligne.id)}
+                                style={styles.bank3177ManualDeleteButton}
+                                title="Supprimer la ligne manuelle"
+                              >
+                                ×
+                              </button>
+                            </>
+                          ) : (
+                            <span>{ligne.description}</span>
+                          )}
                         </td>
 
                         <td style={styles.bank3177TdInput}>
@@ -4561,11 +4665,48 @@ const styles = {
   bank3177Header: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "flex-start",
+    justifyContent: "space-between",
     gap: "16px",
     padding: "14px 18px",
     background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
     borderBottom: "1px solid rgba(147,197,253,0.30)",
+  },
+
+  bank3177ManualButton: {
+    height: "34px",
+    padding: "0 14px",
+    borderRadius: "10px",
+    border: "1px solid rgba(34,211,238,0.65)",
+    background: "linear-gradient(180deg, #0284c7 0%, #0369a1 100%)",
+    color: "#ffffff",
+    fontWeight: "950",
+    fontSize: "12px",
+    cursor: "pointer",
+    boxShadow: "0 0 16px rgba(14,165,233,0.28)",
+  },
+
+  bank3177ManualDescriptionInput: {
+    flex: 1,
+    minWidth: 0,
+    height: "22px",
+    border: "0",
+    outline: "0",
+    background: "transparent",
+    color: "#0f172a",
+    fontWeight: "700",
+    fontSize: "12px",
+  },
+
+  bank3177ManualDeleteButton: {
+    width: "22px",
+    height: "22px",
+    borderRadius: "7px",
+    border: "1px solid #fecaca",
+    background: "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)",
+    color: "#ffffff",
+    fontWeight: "950",
+    lineHeight: "18px",
+    cursor: "pointer",
   },
 
   bank3177Shell: {

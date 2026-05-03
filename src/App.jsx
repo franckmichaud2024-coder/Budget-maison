@@ -394,6 +394,7 @@ export default function App() {
   const [noteEdition, setNoteEdition] = useState("");
   const [valeurs3177, setValeurs3177] = useState({});
   const [input3177Actif, setInput3177Actif] = useState(null);
+  const [hovered3177RowId, setHovered3177RowId] = useState(null);
   const [lignesManuelles3177, setLignesManuelles3177] = useState([]);
   const [selectionXRange, setSelectionXRange] = useState(null);
   const [lignesDesactivees, setLignesDesactivees] = useState({});
@@ -2335,7 +2336,7 @@ export default function App() {
     return [...lignesSynchronisees, ...lignesManuelles];
   }
 
-  function renduInput3177(ligne, champ, valeur, align = "right") {
+  function renduInput3177(ligne, champ, valeur, align = "right", extraInputStyle = {}) {
     const cleInput = `${ligne.id}-${champ}`;
     const valeurSauvee = valeurs3177?.[ligne.id]?.[champ];
     const estActif = input3177Actif === cleInput;
@@ -2373,6 +2374,7 @@ export default function App() {
         }}
         style={{
           ...styles.bank3177Input,
+          ...extraInputStyle,
           textAlign: align,
         }}
       />
@@ -2852,9 +2854,33 @@ export default function App() {
                         ? "#f0fdf4"
                         : "#ffffff";
 
+                    const ligneSurvolee = hovered3177RowId === ligne.id;
+                    const couleurSurvol = ligneSurvolee ? styles.bank3177RowHover.background : null;
+                    const inputSurvolStyle = ligneSurvolee ? styles.bank3177InputHover : {};
+                    const styleDescription = {
+                      ...styles.bank3177TdDescription,
+                      background: couleurSurvol || sectionColor,
+                    };
+                    const styleGains = {
+                      ...styles.bank3177TdInput,
+                      ...(ligneSurvolee ? styles.bank3177TdHover : {}),
+                    };
+                    const styleDepense = {
+                      ...styles.bank3177TdDepenseInput,
+                      ...(ligneSurvolee ? styles.bank3177TdHover : {}),
+                    };
+                    const styleSolde = {
+                      ...styles.bank3177TdSolde,
+                      ...(ligneSurvolee ? styles.bank3177TdHover : {}),
+                    };
+
                     return (
-                      <tr key={ligne.id}>
-                        <td style={{ ...styles.bank3177TdDescription, background: sectionColor }}>
+                      <tr
+                        key={ligne.id}
+                        onMouseEnter={() => setHovered3177RowId(ligne.id)}
+                        onMouseLeave={() => setHovered3177RowId(null)}
+                      >
+                        <td style={styleDescription}>
                           <span style={styles.bank3177LineNumber}>{ligne.index + 1}</span>
                           {ligne.manuel3177 ? (
                             <>
@@ -2878,17 +2904,20 @@ export default function App() {
                           )}
                         </td>
 
-                        <td style={styles.bank3177TdInput}>
-                          {renduInput3177(ligne, "gains", ligne.gains)}
+                        <td style={styleGains}>
+                          {renduInput3177(ligne, "gains", ligne.gains, "right", inputSurvolStyle)}
                         </td>
 
                         {ligne.depenses.map((valeur, depIndex) => (
-                          <td key={`${ligne.id}-dep-${depIndex}`} style={styles.bank3177TdInput}>
-                            {renduInput3177(ligne, `depense${depIndex + 1}`, valeur)}
+                          <td key={`${ligne.id}-dep-${depIndex}`} style={styleDepense}>
+                            {renduInput3177(ligne, `depense${depIndex + 1}`, valeur, "right", {
+                              ...styles.bank3177InputDepense,
+                              ...inputSurvolStyle,
+                            })}
                           </td>
                         ))}
 
-                        <td style={styles.bank3177TdSolde}>
+                        <td style={styleSolde}>
                           {formatArgent(ligne.solde)}
                         </td>
                       </tr>
@@ -4494,6 +4523,32 @@ const styles = {
     padding: "3px 5px",
     background: "#ffffff",
     textAlign: "right",
+  },
+
+  bank3177TdDepenseInput: {
+    border: "1px solid rgba(15,23,42,0.24)",
+    padding: "3px 5px",
+    background: "#e0f2fe",
+    textAlign: "right",
+  },
+
+  bank3177InputDepense: {
+    background: "linear-gradient(180deg, #f0f9ff 0%, #dbeafe 100%)",
+    border: "1px solid #60a5fa",
+  },
+
+  bank3177RowHover: {
+    background: "#fff7cc",
+  },
+
+  bank3177TdHover: {
+    background: "#fff7cc",
+    boxShadow: "inset 0 0 0 2px rgba(245,158,11,0.35)",
+  },
+
+  bank3177InputHover: {
+    background: "linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%)",
+    border: "1px solid #f59e0b",
   },
 
   bank3177SubTh: {
