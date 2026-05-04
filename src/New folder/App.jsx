@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabase";
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, Legend } from "recharts";
 
 const semaines = Array.from({ length: 52 }, (_, i) => i + 1);
 
@@ -9,6 +10,8 @@ const COMPTES_BUDGET = [
   "3177 - Argent accumulé",
   "7570 - Procédures",
 ];
+
+const GRAPH_COLORS = ["#38bdf8", "#22c55e", "#f97316", "#eab308", "#a855f7", "#ef4444", "#14b8a6", "#64748b", "#ec4899", "#06b6d4"];
 
 
 
@@ -194,6 +197,128 @@ const STRUCTURE_BUDGET = {
     "Abonnements",
     "Autre",
   ],
+
+  viewTabsBar: {
+    display: "flex",
+    gap: "10px",
+    alignItems: "center",
+    padding: "10px",
+    margin: "0 0 14px 0",
+    borderRadius: "22px",
+    background: "rgba(2,6,23,0.72)",
+    border: "1px solid rgba(148,163,184,0.22)",
+    boxShadow: "0 14px 34px rgba(0,0,0,0.28)",
+  },
+
+  viewTabButton: {
+    border: "1px solid rgba(148,163,184,0.22)",
+    borderRadius: "16px",
+    padding: "12px 22px",
+    background: "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)",
+    color: "#cbd5e1",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+  },
+
+  viewTabButtonActive: {
+    background: "linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)",
+    color: "#ffffff",
+    borderColor: "rgba(125,211,252,0.70)",
+    boxShadow: "0 12px 32px rgba(56,189,248,0.28), inset 0 1px 0 rgba(255,255,255,0.22)",
+  },
+
+  graphPage: {
+    padding: "4px 0 110px",
+  },
+
+  graphHeroCard: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "18px",
+    alignItems: "stretch",
+    borderRadius: "28px",
+    padding: "24px",
+    marginBottom: "18px",
+    background: "linear-gradient(135deg, rgba(15,23,42,0.96) 0%, rgba(2,6,23,0.98) 56%, rgba(14,165,233,0.22) 100%)",
+    border: "1px solid rgba(56,189,248,0.22)",
+    boxShadow: "0 24px 60px rgba(0,0,0,0.34)",
+  },
+
+  graphKicker: {
+    color: "#38bdf8",
+    textTransform: "uppercase",
+    letterSpacing: "0.22em",
+    fontSize: "12px",
+    fontWeight: "950",
+  },
+
+  graphTitle: {
+    color: "#ffffff",
+    fontSize: "34px",
+    lineHeight: 1.05,
+    fontWeight: "1000",
+    marginTop: "8px",
+  },
+
+  graphSubtitle: {
+    color: "#cbd5e1",
+    fontSize: "15px",
+    marginTop: "8px",
+    maxWidth: "760px",
+  },
+
+  graphHeroStats: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(150px, 1fr))",
+    gap: "12px",
+    minWidth: "520px",
+  },
+
+  graphMiniStat: {
+    borderRadius: "20px",
+    padding: "16px",
+    background: "rgba(15,23,42,0.88)",
+    border: "1px solid rgba(56,189,248,0.20)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+  },
+
+  graphGridTwo: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "18px",
+    marginBottom: "18px",
+  },
+
+  graphCard: {
+    borderRadius: "28px",
+    padding: "20px",
+    minHeight: "420px",
+    background: "rgba(2,6,23,0.82)",
+    border: "1px solid rgba(148,163,184,0.18)",
+    boxShadow: "0 18px 48px rgba(0,0,0,0.30)",
+  },
+
+  graphCardTitle: {
+    color: "#ffffff",
+    fontSize: "20px",
+    fontWeight: "1000",
+    marginBottom: "14px",
+  },
+
+  graphEmpty: {
+    height: "330px",
+    borderRadius: "20px",
+    border: "1px dashed rgba(148,163,184,0.35)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#94a3b8",
+    fontWeight: "800",
+  },
+
 };
 const BLOCS_FIXES = Object.keys(STRUCTURE_BUDGET).sort((a, b) =>
   a.localeCompare(b, "fr", { sensitivity: "base" })
@@ -347,6 +472,7 @@ export default function App() {
   const [blocActif, setBlocActif] = useState(BLOCS_FIXES[0]);
   const [comptesBudget, setComptesBudget] = useState(() => ordonnerComptesBudget(COMPTES_BUDGET));
   const [compteActif, setCompteActif] = useState(COMPTES_BUDGET[0]);
+  const [vueActuelle, setVueActuelle] = useState("budget");
   const [nouveauCompte, setNouveauCompte] = useState("");
   const [dragCompte, setDragCompte] = useState(null);
   const [compteEdition, setCompteEdition] = useState(null);
@@ -1859,6 +1985,60 @@ export default function App() {
   );
 
   const solde = totalRevenus - totalDepenses;
+
+  const lignesGraphiques = useMemo(() => {
+    return data.filter((item) => item.type !== "revenu");
+  }, [data]);
+
+  const revenusGraphiques = useMemo(() => {
+    const source = compteEstEnveloppes(compteActif) ? revenusResume3185 : data;
+    return source.filter((item) => item.type === "revenu");
+  }, [compteActif, data, revenusResume3185]);
+
+  const graphiqueDepensesParBloc = useMemo(() => {
+    const map = new Map();
+
+    lignesGraphiques.forEach((item) => {
+      const bloc = normaliserBloc(item.bloc || "SANS BLOC");
+      const montantMois = calculerMontants(item).mois;
+      map.set(bloc, round2((map.get(bloc) || 0) + montantMois));
+    });
+
+    return Array.from(map, ([name, value]) => ({ name, value }))
+      .filter((item) => item.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [lignesGraphiques]);
+
+  const graphiqueTopDepenses = useMemo(() => {
+    return [...lignesGraphiques]
+      .map((item) => ({
+        name: item.description || "Sans description",
+        value: round2(calculerMontants(item).mois),
+      }))
+      .filter((item) => item.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+  }, [lignesGraphiques]);
+
+  const graphiqueResume = useMemo(() => {
+    const totalRev = revenusGraphiques.reduce((acc, item) => acc + calculerMontants(item).mois, 0);
+    const totalDep = lignesGraphiques.reduce((acc, item) => acc + calculerMontants(item).mois, 0);
+    return [
+      { name: "Revenus", value: round2(totalRev) },
+      { name: "Dépenses", value: round2(totalDep) },
+      { name: "Bénéfices", value: round2(totalRev - totalDep) },
+    ];
+  }, [revenusGraphiques, lignesGraphiques]);
+
+  const graphiqueAccumulation = useMemo(() => {
+    const totalCible = lignesGraphiques.reduce((acc, item) => acc + calculerMontants(item).annee, 0);
+    const totalAccumule = lignesGraphiques.reduce((acc, item) => acc + montantAccumule(item), 0);
+    return [
+      { name: "Objectif annuel", value: round2(totalCible) },
+      { name: "Accumuler", value: round2(totalAccumule) },
+      { name: "Restant", value: round2(Math.max(totalCible - totalAccumule, 0)) },
+    ];
+  }, [lignesGraphiques, valeurs3177, lignesDesactivees]);
   const semaineActuelle = getWeekNumberISO(nowLive);
   const weekHue = (semaineActuelle * 7) % 360;
   const weekGlowColor = `hsl(${weekHue} 95% 58%)`;
@@ -2837,6 +3017,99 @@ const rev = {
   const afficherTableauDetaille = compteEstEnveloppes(compteActif);
 
 
+  function renduOngletGraphique() {
+    const totalRev = graphiqueResume.find((item) => item.name === "Revenus")?.value || 0;
+    const totalDep = graphiqueResume.find((item) => item.name === "Dépenses")?.value || 0;
+    const beneficeGraph = totalRev - totalDep;
+
+    const renderMoneyTooltip = (value) => formatArgent(value);
+
+    return (
+      <div style={styles.graphPage}>
+        <div style={styles.graphHeroCard}>
+          <div>
+            <div style={styles.graphKicker}>Analyse visuelle</div>
+            <div style={styles.graphTitle}>Graphique du compte enveloppe</div>
+            <div style={styles.graphSubtitle}>Dépenses par catégorie, revenus vs dépenses, top dépenses et progression de l’argent accumulé.</div>
+          </div>
+          <div style={styles.graphHeroStats}>
+            <div style={styles.graphMiniStat}><span>Dépenses / mois</span><strong>{formatArgent(totalDep)}</strong></div>
+            <div style={styles.graphMiniStat}><span>Revenus / mois</span><strong>{formatArgent(totalRev)}</strong></div>
+            <div style={{ ...styles.graphMiniStat, borderColor: beneficeGraph >= 0 ? "rgba(34,197,94,0.45)" : "rgba(239,68,68,0.45)" }}><span>Bénéfices</span><strong style={{ color: beneficeGraph >= 0 ? "#86efac" : "#fca5a5" }}>{formatArgent(beneficeGraph)}</strong></div>
+          </div>
+        </div>
+
+        <div style={styles.graphGridTwo}>
+          <section style={styles.graphCard}>
+            <div style={styles.graphCardTitle}>Dépenses par bloc</div>
+            {graphiqueDepensesParBloc.length ? (
+              <ResponsiveContainer width="100%" height={350}>
+                <PieChart>
+                  <Pie data={graphiqueDepensesParBloc} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={72} outerRadius={125} paddingAngle={4} label={({ name }) => name}>
+                    {graphiqueDepensesParBloc.map((_, index) => <Cell key={index} fill={GRAPH_COLORS[index % GRAPH_COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip formatter={renderMoneyTooltip} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={styles.graphEmpty}>Aucune dépense à afficher.</div>
+            )}
+          </section>
+
+          <section style={styles.graphCard}>
+            <div style={styles.graphCardTitle}>Revenus vs dépenses</div>
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart data={graphiqueResume}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                <XAxis dataKey="name" stroke="#cbd5e1" />
+                <YAxis stroke="#cbd5e1" />
+                <Tooltip formatter={renderMoneyTooltip} />
+                <Bar dataKey="value" radius={[10, 10, 0, 0]}>
+                  {graphiqueResume.map((_, index) => <Cell key={index} fill={GRAPH_COLORS[index % GRAPH_COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </section>
+        </div>
+
+        <div style={styles.graphGridTwo}>
+          <section style={styles.graphCard}>
+            <div style={styles.graphCardTitle}>Top 10 dépenses mensuelles</div>
+            {graphiqueTopDepenses.length ? (
+              <ResponsiveContainer width="100%" height={380}>
+                <BarChart data={graphiqueTopDepenses} layout="vertical" margin={{ left: 95, right: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                  <XAxis type="number" stroke="#cbd5e1" />
+                  <YAxis type="category" dataKey="name" stroke="#cbd5e1" width={150} />
+                  <Tooltip formatter={renderMoneyTooltip} />
+                  <Bar dataKey="value" fill="#38bdf8" radius={[0, 10, 10, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={styles.graphEmpty}>Aucune dépense à afficher.</div>
+            )}
+          </section>
+
+          <section style={styles.graphCard}>
+            <div style={styles.graphCardTitle}>Objectif annuel vs accumulé</div>
+            <ResponsiveContainer width="100%" height={380}>
+              <LineChart data={graphiqueAccumulation}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                <XAxis dataKey="name" stroke="#cbd5e1" />
+                <YAxis stroke="#cbd5e1" />
+                <Tooltip formatter={renderMoneyTooltip} />
+                <Legend />
+                <Line type="monotone" dataKey="value" name="Montant" stroke="#22c55e" strokeWidth={4} dot={{ r: 6 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
+
   if (authLoading) {
     return (
       <div style={styles.loginPage}>
@@ -2980,7 +3253,8 @@ const rev = {
         }
 
         body {
-          overflow: hidden;
+          overflow-x: hidden;
+          overflow-y: auto;
         }
 
         button {
@@ -3610,6 +3884,28 @@ const rev = {
           </div>
         )}
       </div>
+
+        <div style={styles.viewTabsBar}>
+          <button
+            type="button"
+            onClick={() => setVueActuelle("budget")}
+            style={{ ...styles.viewTabButton, ...(vueActuelle === "budget" ? styles.viewTabButtonActive : {}) }}
+          >
+            Budget
+          </button>
+          <button
+            type="button"
+            onClick={() => setVueActuelle("graphique")}
+            style={{ ...styles.viewTabButton, ...(vueActuelle === "graphique" ? styles.viewTabButtonActive : {}) }}
+          >
+            Graphique
+          </button>
+        </div>
+
+        {vueActuelle === "graphique" ? (
+          renduOngletGraphique()
+        ) : (
+          <>
 
         {afficherTableauDetaille ? (
           <>
@@ -4268,12 +4564,146 @@ const rev = {
             </div>
           </div>
         )}
+          </>
+        )}
       </div>
     </>
   );
 }
 
 const styles = {
+
+  viewTabsBar: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "12px",
+    margin: "14px auto 24px auto",
+    width: "fit-content",
+    borderRadius: "22px",
+    background: "rgba(2,6,23,0.88)",
+    border: "1px solid rgba(56,189,248,0.30)",
+    boxShadow: "0 18px 42px rgba(0,0,0,0.38)",
+  },
+
+  viewTabButton: {
+    border: "1px solid rgba(148,163,184,0.26)",
+    borderRadius: "16px",
+    padding: "13px 26px",
+    background: "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)",
+    color: "#e2e8f0",
+    fontWeight: "950",
+    cursor: "pointer",
+    fontSize: "14px",
+    letterSpacing: "0.02em",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+  },
+
+  viewTabButtonActive: {
+    background: "linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)",
+    color: "#ffffff",
+    borderColor: "rgba(125,211,252,0.75)",
+    boxShadow: "0 12px 32px rgba(56,189,248,0.32), inset 0 1px 0 rgba(255,255,255,0.22)",
+  },
+
+  graphPage: {
+    maxWidth: "1880px",
+    margin: "0 auto",
+    padding: "10px 20px 220px",
+    minHeight: "calc(100vh - 120px)",
+    overflow: "visible",
+  },
+
+  graphHeroCard: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "18px",
+    alignItems: "stretch",
+    borderRadius: "30px",
+    padding: "28px",
+    marginBottom: "22px",
+    background: "linear-gradient(135deg, rgba(15,23,42,0.98) 0%, rgba(2,6,23,0.98) 54%, rgba(14,165,233,0.28) 100%)",
+    border: "1px solid rgba(56,189,248,0.30)",
+    boxShadow: "0 24px 70px rgba(0,0,0,0.40)",
+  },
+
+  graphKicker: {
+    color: "#38bdf8",
+    textTransform: "uppercase",
+    letterSpacing: "0.22em",
+    fontSize: "12px",
+    fontWeight: "950",
+  },
+
+  graphTitle: {
+    color: "#ffffff",
+    fontSize: "34px",
+    lineHeight: 1.05,
+    fontWeight: "1000",
+    marginTop: "8px",
+  },
+
+  graphSubtitle: {
+    color: "#cbd5e1",
+    fontSize: "15px",
+    marginTop: "8px",
+    maxWidth: "760px",
+  },
+
+  graphHeroStats: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(150px, 1fr))",
+    gap: "12px",
+    minWidth: "520px",
+  },
+
+  graphMiniStat: {
+    borderRadius: "20px",
+    padding: "16px",
+    background: "rgba(15,23,42,0.88)",
+    border: "1px solid rgba(56,189,248,0.20)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    color: "#ffffff",
+  },
+
+  graphGridTwo: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "22px",
+    marginBottom: "24px",
+  },
+
+  graphCard: {
+    borderRadius: "30px",
+    padding: "22px",
+    minHeight: "500px",
+    background: "rgba(2,6,23,0.86)",
+    border: "1px solid rgba(148,163,184,0.22)",
+    boxShadow: "0 18px 54px rgba(0,0,0,0.34)",
+    overflow: "visible",
+  },
+
+  graphCardTitle: {
+    color: "#ffffff",
+    fontSize: "20px",
+    fontWeight: "1000",
+    marginBottom: "14px",
+  },
+
+  graphEmpty: {
+    height: "330px",
+    borderRadius: "20px",
+    border: "1px dashed rgba(148,163,184,0.35)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#94a3b8",
+    fontWeight: "800",
+  },
+
   bank3177FooterMetric: {
     display: "flex",
     alignItems: "center",
@@ -5269,8 +5699,10 @@ const styles = {
     background: "#020817",
     color: "#e5e7eb",
     paddingTop: "88px",
-    paddingBottom: "132px",
+    paddingBottom: "240px",
     position: "relative",
+    overflowX: "hidden",
+    overflowY: "visible",
   },
 
   title: {
