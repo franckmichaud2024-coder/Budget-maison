@@ -17,11 +17,30 @@ const GRAPH_COLORS = ["#00E5FF", "#35F68B", "#FF8A1F", "#FACC15", "#B45CFF", "#F
 
 function ordonnerComptesBudget(liste = []) {
   const ordreFixe = COMPTES_BUDGET;
-  const uniques = Array.from(new Set([...(liste || []), ...ordreFixe]));
+  const nettoyerIntitule = (compte) =>
+    String(compte || "")
+      .replace(/^\s*\d+\s*-\s*/, "")
+      .trim()
+      .toLowerCase();
 
-  return uniques.sort((a, b) => {
-    const ia = ordreFixe.indexOf(a);
-    const ib = ordreFixe.indexOf(b);
+  // IMPORTANT : on ajoute les comptes par défaut seulement si leur INTITULÉ
+  // n’existe pas déjà. Comme ça, changer seulement le numéro de
+  // "3185 - Enveloppes" en "3190 - Enveloppes" ne recrée plus l'ancien onglet 3185.
+  const resultat = [];
+
+  for (const compte of liste || []) {
+    if (!resultat.includes(compte)) resultat.push(compte);
+  }
+
+  for (const compteFixe of ordreFixe) {
+    const intituleFixe = nettoyerIntitule(compteFixe);
+    const existeDeja = resultat.some((compte) => nettoyerIntitule(compte) === intituleFixe);
+    if (!existeDeja) resultat.push(compteFixe);
+  }
+
+  return resultat.sort((a, b) => {
+    const ia = ordreFixe.findIndex((compte) => nettoyerIntitule(compte) === nettoyerIntitule(a));
+    const ib = ordreFixe.findIndex((compte) => nettoyerIntitule(compte) === nettoyerIntitule(b));
 
     if (ia !== -1 && ib !== -1) return ia - ib;
     if (ia !== -1) return -1;
@@ -421,6 +440,7 @@ export default function App() {
   const lastScrollRef = useRef(0);
   const bottomScrollRef = useRef(null);
   const [scrollInfo, setScrollInfo] = useState({ left: 0, max: 1 });
+  const [bottomScrollWidth, setBottomScrollWidth] = useState(3200);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetPasswordInput, setResetPasswordInput] = useState("");
   const [showGuide, setShowGuide] = useState(() => {
@@ -473,6 +493,25 @@ export default function App() {
   const [echeanceEditionValue, setEcheanceEditionValue] = useState("");
 
   const [ligneEditionInfo, setLigneEditionInfo] = useState(null);
+  const [ligneDescriptionJaune, setLigneDescriptionJaune] = useState(null);
+  const [descriptionJauneMap, setDescriptionJauneMap] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("budget_description_jaune_v2") || "{}");
+    } catch {
+      return {};
+    }
+  });
+  const [lignesManuelles3177, setLignesManuelles3177] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("budget_3177_lignes_manuelles_v2") || "[]");
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
+  const [nouvelleLigneManuelle3177, setNouvelleLigneManuelle3177] = useState("");
+  const [editionManuelle3177Id, setEditionManuelle3177Id] = useState(null);
+  const [editionManuelle3177Texte, setEditionManuelle3177Texte] = useState("");
   const [descriptionEdition, setDescriptionEdition] = useState("");
   const [noteEdition, setNoteEdition] = useState("");
   const [valeurs3177, setValeurs3177] = useState({});
@@ -601,7 +640,7 @@ export default function App() {
 
     const ancienCompte = compteActif;
 
-    const nouvelleListe = ordonnerComptesBudget(comptesBudget).map((compte) =>
+    const nouvelleListe = comptesBudget.map((compte) =>
       compte === ancienCompte ? nomFinal : compte
     );
 
@@ -747,7 +786,9 @@ export default function App() {
 
     const ancienneValeur = compteEdition;
 
-    const prochaineListe = ordonnerComptesBudget(comptesBudget).map((c) =>
+    // Remplace le numéro du compte dans la liste EXISTANTE.
+    // Important : ne pas réordonner ici, sinon certains comptes peuvent se dupliquer visuellement.
+    const prochaineListe = comptesBudget.map((c) =>
       c === ancienneValeur ? nouveauNom : c
     );
 
@@ -898,18 +939,32 @@ export default function App() {
         left: table.scrollLeft,
         max,
       });
+      setBottomScrollWidth(table.scrollWidth || 3200);
+
+      if (bottomScrollRef.current && bottomScrollRef.current.scrollLeft !== table.scrollLeft) {
+        bottomScrollRef.current.scrollLeft = table.scrollLeft;
+      }
+    };
+
+    const updateFromBottom = () => {
+      const bottom = bottomScrollRef.current;
+      if (!bottom) return;
+      table.scrollLeft = bottom.scrollLeft;
+      lastScrollRef.current = bottom.scrollLeft;
     };
 
     table.addEventListener("scroll", updateInfo, { passive: true });
+    bottomScrollRef.current?.addEventListener("scroll", updateFromBottom, { passive: true });
     window.addEventListener("resize", updateInfo);
 
     updateInfo();
 
     return () => {
       table.removeEventListener("scroll", updateInfo);
+      bottomScrollRef.current?.removeEventListener("scroll", updateFromBottom);
       window.removeEventListener("resize", updateInfo);
     };
-  }, [data]);
+  }, [data, compteActif]);
 
   useEffect(() => {
     const el = tableScrollRef.current;
@@ -1179,6 +1234,64 @@ export default function App() {
 
   function getUserId() {
     return session?.user?.id || null;
+  }
+
+  function toggleDescriptionJaune(id) {
+    if (!id) return;
+    const next = { ...descriptionJauneMap, [id]: !descriptionJauneMap[id] };
+    setDescriptionJauneMap(next);
+    localStorage.setItem("budget_description_jaune_v2", JSON.stringify(next));
+  }
+
+  function sauvegarderLignesManuelles3177(next) {
+    setLignesManuelles3177(next);
+    localStorage.setItem("budget_3177_lignes_manuelles_v2", JSON.stringify(next));
+  }
+
+  function ajouterLigneManuelle3177() {
+    const texte = nouvelleLigneManuelle3177.trim();
+    if (!texte) return;
+
+    const id = `manuel-3177-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    sauvegarderLignesManuelles3177([
+      ...lignesManuelles3177,
+      { id, description: texte, bloc: "MANUEL 3177", manuel: true },
+    ]);
+    setNouvelleLigneManuelle3177("");
+  }
+
+  function supprimerLigneManuelle3177(ligne) {
+    if (!ligne?.id) return;
+    const ok = window.confirm(`Supprimer la ligne manuelle "${ligne.description}" ?`);
+    if (!ok) return;
+
+    sauvegarderLignesManuelles3177(lignesManuelles3177.filter((item) => item.id !== ligne.id));
+
+    const nextValeurs = { ...valeurs3177 };
+    delete nextValeurs[ligne.id];
+    sauvegarderValeurs3177(nextValeurs);
+
+    const nextJaune = { ...descriptionJauneMap };
+    delete nextJaune[ligne.id];
+    setDescriptionJauneMap(nextJaune);
+    localStorage.setItem("budget_description_jaune_v2", JSON.stringify(nextJaune));
+  }
+
+  function commencerEditionManuelle3177(ligne) {
+    setEditionManuelle3177Id(ligne.id);
+    setEditionManuelle3177Texte(ligne.description || "");
+  }
+
+  function sauvegarderEditionManuelle3177(ligne) {
+    const texte = editionManuelle3177Texte.trim();
+    if (!texte) return;
+    sauvegarderLignesManuelles3177(
+      lignesManuelles3177.map((item) =>
+        item.id === ligne.id ? { ...item, description: texte } : item
+      )
+    );
+    setEditionManuelle3177Id(null);
+    setEditionManuelle3177Texte("");
   }
 
   function getValeurs3177StorageKey() {
@@ -2368,7 +2481,7 @@ const rev = {
       lignesVisibles3185.push(...lignesBloc);
     }
 
-    return lignesVisibles3185.map((item, index) => {
+    const lignesBase = lignesVisibles3185.map((item, index) => {
       const id = item.id || `ligne-${index}`;
 
       // Correction : le 3177 commence à 0.
@@ -2394,14 +2507,41 @@ const rev = {
         totalDepenses,
         solde,
         echeance: item.echeance || "",
+        manuel: false,
       };
     });
+
+    const lignesManuelles = lignesManuelles3177.map((item, offset) => {
+      const id = item.id || `manuel-3177-${offset}`;
+      const gains = round2(lireValeur3177(id, "gains", 0));
+      const depenses = Array.from({ length: 7 }, (_, i) =>
+        round2(lireValeur3177(id, `depense${i + 1}`, 0))
+      );
+      const totalDepenses = round2(depenses.reduce((acc, val) => acc + Number(val || 0), 0));
+      const solde = round2(gains - totalDepenses);
+
+      return {
+        id,
+        index: lignesBase.length + offset,
+        bloc: item.bloc || "MANUEL 3177",
+        description: item.description || "Ligne manuelle",
+        gains,
+        depenses,
+        totalDepenses,
+        solde,
+        echeance: "",
+        manuel: true,
+      };
+    });
+
+    return [...lignesBase, ...lignesManuelles];
   }
 
   function renduInput3177(ligne, champ, valeur, align = "right") {
     const cleInput = `${ligne.id}-${champ}`;
     const valeurSauvee = valeurs3177?.[ligne.id]?.[champ];
     const estActif = input3177Actif === cleInput;
+    const estDepense3177 = String(champ || "").startsWith("depense");
 
     const valeurAffichee = estActif
       ? String(valeurSauvee ?? "")
@@ -2436,6 +2576,7 @@ const rev = {
         }}
         style={{
           ...styles.bank3177Input,
+          ...(estDepense3177 ? styles.bank3177InputDepense : {}),
           textAlign: align,
         }}
       />
@@ -2866,7 +3007,23 @@ const rev = {
           </div>
 
           <div style={styles.bank3177Note}>
-            Les descriptions sont synchronisées automatiquement avec le compte <strong>{comptePrincipalBudget}</strong>. Tu peux modifier les gains et entrer jusqu’à 7 dépenses par ligne.
+            Les descriptions sont synchronisées automatiquement avec le compte <strong>{comptePrincipalBudget}</strong>. Tu peux modifier les gains, entrer jusqu’à 7 dépenses par ligne et ajouter des lignes manuelles indépendantes.
+          </div>
+
+          <div style={styles.bank3177ManualBar}>
+            <span style={styles.bank3177ManualLabel}>Ligne manuelle 3177</span>
+            <input
+              value={nouvelleLigneManuelle3177}
+              onChange={(e) => setNouvelleLigneManuelle3177(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") ajouterLigneManuelle3177();
+              }}
+              placeholder="Ex.: Ajustement manuel, dépôt spécial, correction..."
+              style={styles.bank3177ManualInput}
+            />
+            <button type="button" onClick={ajouterLigneManuelle3177} style={styles.bank3177ManualButton}>
+              + Ajouter
+            </button>
           </div>
 
           <div style={styles.bank3177TableWrap}>
@@ -2910,7 +3067,45 @@ const rev = {
                       <tr key={ligne.id}>
                         <td style={{ ...styles.bank3177TdDescription, background: sectionColor }}>
                           <span style={styles.bank3177LineNumber}>{ligne.index + 1}</span>
-                          <span>{ligne.description}</span>
+                          <button
+                            type="button"
+                            onClick={() => toggleDescriptionJaune(ligne.id)}
+                            style={{
+                              ...styles.descriptionStarButton,
+                              ...(descriptionJauneMap[ligne.id] ? styles.descriptionStarButtonOn : {}),
+                            }}
+                            title={descriptionJauneMap[ligne.id] ? "Retirer le jaune" : "Mettre cette ligne en jaune"}
+                          >
+                            {descriptionJauneMap[ligne.id] ? "★" : "☆"}
+                          </button>
+                          {ligne.manuel && editionManuelle3177Id === ligne.id ? (
+                            <>
+                              <input
+                                value={editionManuelle3177Texte}
+                                onChange={(e) => setEditionManuelle3177Texte(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") sauvegarderEditionManuelle3177(ligne);
+                                  if (e.key === "Escape") setEditionManuelle3177Id(null);
+                                }}
+                                style={styles.bank3177DescriptionEditInput}
+                                autoFocus
+                              />
+                              <button type="button" onClick={() => sauvegarderEditionManuelle3177(ligne)} style={styles.saveButton}>✓</button>
+                              <button type="button" onClick={() => setEditionManuelle3177Id(null)} style={styles.cancelButton}>×</button>
+                            </>
+                          ) : (
+                            <>
+                              <span style={descriptionJauneMap[ligne.id] ? styles.descriptionTextYellow : undefined}>
+                                {ligne.description}
+                              </span>
+                              {ligne.manuel ? (
+                                <>
+                                  <button type="button" onClick={() => commencerEditionManuelle3177(ligne)} style={styles.bank3177MiniAction}>✏️</button>
+                                  <button type="button" onClick={() => supprimerLigneManuelle3177(ligne)} style={styles.bank3177MiniDelete}>🗑</button>
+                                </>
+                              ) : null}
+                            </>
+                          )}
                         </td>
 
                         <td style={styles.bank3177TdInput}>
@@ -3004,13 +3199,35 @@ const rev = {
           <section style={styles.graphCard}>
             <div style={styles.graphCardTitle}>Dépenses par bloc</div>
             {graphiqueDepensesParBloc.length ? (
-              <ResponsiveContainer width="100%" height={350}>
-                <PieChart>
-                  <Pie data={graphiqueDepensesParBloc} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={72} outerRadius={125} paddingAngle={4} label={({ name }) => name}>
+              <ResponsiveContainer width="100%" height={430}>
+                <PieChart margin={{ top: 0, right: 20, bottom: 95, left: 20 }}>
+                  <Pie
+                    data={graphiqueDepensesParBloc}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="53%"
+                    innerRadius={72}
+                    outerRadius={125}
+                    paddingAngle={4}
+                    label={({ name, x, y, fill }) => (
+                      <text x={x} y={y + 24} fill={fill} fontSize={13} fontWeight={800} textAnchor={x > 340 ? "start" : "end"}>
+                        {name}
+                      </text>
+                    )}
+                  >
                     {graphiqueDepensesParBloc.map((_, index) => <Cell key={index} fill={GRAPH_COLORS[index % GRAPH_COLORS.length]} />)}
                   </Pie>
                   <Tooltip content={<CustomTooltipProMax />} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
-                  <Legend />
+                  <Legend
+                    verticalAlign="bottom"
+                    align="center"
+                    wrapperStyle={{
+                      paddingTop: "42px",
+                      transform: "translateY(52px)",
+                      lineHeight: "22px",
+                    }}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -4128,8 +4345,29 @@ const rev = {
                                         {activeLigne ? "ON" : "OFF"}
                                       </button>
                                       <button
-                                        onClick={() => commencerEditionInfo(item)}
-                                        style={{ ...styles.descriptionEditButton, flex: 1 }}
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleDescriptionJaune(item.id);
+                                        }}
+                                        style={{
+                                          ...styles.descriptionStarButton,
+                                          ...(descriptionJauneMap[item.id] ? styles.descriptionStarButtonOn : {}),
+                                        }}
+                                        title={descriptionJauneMap[item.id] ? "Retirer le jaune" : "Mettre cette description en jaune"}
+                                      >
+                                        {descriptionJauneMap[item.id] ? "★" : "☆"}
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setLigneDescriptionJaune(item.id);
+                                          commencerEditionInfo(item);
+                                        }}
+                                        style={{
+                                          ...styles.descriptionEditButton,
+                                          ...(descriptionJauneMap[item.id] ? styles.descriptionEditButtonYellow : {}),
+                                          flex: 1,
+                                        }}
                                         title="Cliquer pour modifier la catégorie / note"
                                       >
                                         {item.description || "-"}
@@ -4463,6 +4701,21 @@ const rev = {
           </div>
         )}
 
+        {afficherTableauDetaille && (
+          <div
+            ref={bottomScrollRef}
+            style={styles.nativeBottomScrollBar}
+            onScroll={(e) => {
+              const table = tableScrollRef.current;
+              if (!table) return;
+              table.scrollLeft = e.currentTarget.scrollLeft;
+              lastScrollRef.current = e.currentTarget.scrollLeft;
+            }}
+          >
+            <div style={{ width: bottomScrollWidth, height: 1 }} />
+          </div>
+        )}
+
         <div style={styles.excelTabsBar}>
           {ordonnerComptesBudget(comptesBudget).map((compte) => {
             const couleur = couleurCompte(compte);
@@ -4506,47 +4759,7 @@ const rev = {
           })}
         </div>
 
-        {afficherTableauDetaille && (
-          <div style={styles.financeNavBar}>
-            <div style={styles.financeNavShell}>
-              <button onClick={() => scrollTableTo("start")} style={styles.financeNavButton}>
-                ⏮ Début
-              </button>
 
-              <button onClick={() => scrollTableBy(-700)} style={styles.financeNavButton}>
-                ◀ Gauche
-              </button>
-
-              <div style={styles.financeNavCenter}>
-                <div style={styles.financeNavTopLine}>
-                  <span>Navigation calendrier</span>
-                  <strong>{Math.round((scrollInfo.left / Math.max(scrollInfo.max, 1)) * 100)}%</strong>
-                </div>
-
-                <div style={styles.financeTrackOuter}>
-                  <div
-                    style={{
-                      ...styles.financeTrackFill,
-                      width: `${Math.round((scrollInfo.left / Math.max(scrollInfo.max, 1)) * 100)}%`,
-                    }}
-                  />
-                </div>
-
-                <div ref={bottomScrollRef} style={styles.financeBottomScroll}>
-                  <div style={{ width: "4000px", height: "1px" }} />
-                </div>
-              </div>
-
-              <button onClick={() => scrollTableBy(700)} style={styles.financeNavButton}>
-                Droite ▶
-              </button>
-
-              <button onClick={() => scrollTableTo("end")} style={styles.financeNavButton}>
-                Fin ⏭
-              </button>
-            </div>
-          </div>
-        )}
           </>
         )}
       </div>
@@ -4585,10 +4798,11 @@ const styles = {
   },
 
   viewTabButtonActive: {
-    background: "linear-gradient(135deg, #0284c7 0%, #38bdf8 100%)",
-    color: "#ffffff",
-    borderColor: "rgba(125,211,252,0.75)",
-    boxShadow: "0 12px 32px rgba(56,189,248,0.32), inset 0 1px 0 rgba(255,255,255,0.22)",
+    background: "linear-gradient(135deg, #facc15 0%, #f59e0b 100%)",
+    color: "#111827",
+    borderColor: "rgba(250,204,21,0.95)",
+    boxShadow: "0 12px 32px rgba(250,204,21,0.38), 0 0 18px rgba(250,204,21,0.22), inset 0 1px 0 rgba(255,255,255,0.45)",
+    transform: "translateY(-1px)",
   },
 
   graphPage: {
@@ -4782,6 +4996,78 @@ const styles = {
     boxShadow: "0 -10px 28px rgba(0,0,0,0.42), 0 0 24px rgba(14,165,233,0.18)",
   },
 
+  bank3177ManualBar: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    padding: "8px 14px",
+    background: "linear-gradient(180deg, #fff7ed 0%, #fef3c7 100%)",
+    borderTop: "1px solid #fdba74",
+    borderBottom: "1px solid #fdba74",
+  },
+
+  bank3177ManualLabel: {
+    color: "#7c2d12",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    fontSize: "12px",
+    whiteSpace: "nowrap",
+  },
+
+  bank3177ManualInput: {
+    flex: 1,
+    height: "28px",
+    borderRadius: "8px",
+    border: "1px solid #f97316",
+    background: "#ffffff",
+    color: "#0f172a",
+    fontWeight: "750",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  bank3177ManualButton: {
+    minWidth: "92px",
+    height: "30px",
+    borderRadius: "9px",
+    border: "1px solid #ca8a04",
+    background: "linear-gradient(180deg, #fde047 0%, #facc15 100%)",
+    color: "#111827",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 0 14px rgba(250,204,21,0.35), inset 0 1px 0 rgba(255,255,255,0.8)",
+  },
+
+  bank3177DescriptionEditInput: {
+    flex: 1,
+    height: "26px",
+    borderRadius: "7px",
+    border: "1px solid #60a5fa",
+    background: "#ffffff",
+    color: "#0f172a",
+    fontWeight: "850",
+    padding: "0 8px",
+    outline: "none",
+  },
+
+  bank3177MiniAction: {
+    marginLeft: "8px",
+    height: "24px",
+    borderRadius: "7px",
+    border: "1px solid #38bdf8",
+    background: "linear-gradient(180deg, #e0f2fe 0%, #bae6fd 100%)",
+    cursor: "pointer",
+  },
+
+  bank3177MiniDelete: {
+    marginLeft: "4px",
+    height: "24px",
+    borderRadius: "7px",
+    border: "1px solid #f87171",
+    background: "linear-gradient(180deg, #fee2e2 0%, #fecaca 100%)",
+    cursor: "pointer",
+  },
+
   bank3177Input: {
     width: "100%",
     height: "24px",
@@ -4795,6 +5081,13 @@ const styles = {
     outline: "none",
     fontVariantNumeric: "tabular-nums",
     boxShadow: "inset 0 1px 2px rgba(15,23,42,0.08)",
+  },
+
+  bank3177InputDepense: {
+    border: "1px solid #fdba74",
+    background: "linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%)",
+    color: "#7c2d12",
+    boxShadow: "inset 0 0 7px rgba(251,146,60,0.38)",
   },
 
   bank3177TdInput: {
@@ -5094,9 +5387,39 @@ const styles = {
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
   },
 
+  descriptionStarButton: {
+    width: "28px",
+    minWidth: "28px",
+    height: "24px",
+    borderRadius: "7px",
+    border: "1px solid rgba(148,163,184,0.65)",
+    background: "linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)",
+    color: "#64748b",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9)",
+  },
+
+  descriptionStarButtonOn: {
+    background: "linear-gradient(180deg, #fde047 0%, #eab308 100%)",
+    border: "1px solid #ca8a04",
+    color: "#111827",
+    boxShadow: "0 0 12px rgba(250,204,21,0.65), inset 0 1px 0 rgba(255,255,255,0.8)",
+  },
+
+  descriptionTextYellow: {
+    background: "linear-gradient(180deg, #fef08a 0%, #facc15 100%)",
+    border: "1px solid #eab308",
+    borderRadius: "6px",
+    padding: "2px 6px",
+    color: "#111827",
+    fontWeight: "950",
+    boxShadow: "0 0 10px rgba(250,204,21,0.40)",
+  },
+
   descriptionEditButton: {
     minHeight: "24px",
-    maxWidth: "calc(100% - 70px)",
+    maxWidth: "calc(100% - 105px)",
     padding: "2px 6px",
     border: "1px solid rgba(15,23,42,0.18)",
     background: "#ffffff",
@@ -5109,6 +5432,15 @@ const styles = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     textAlign: "left",
+    transition: "background 160ms ease, border-color 160ms ease, box-shadow 160ms ease",
+  },
+
+  descriptionEditButtonYellow: {
+    background: "linear-gradient(180deg, #fef08a 0%, #facc15 100%)",
+    border: "1px solid #eab308",
+    color: "#111827",
+    fontWeight: "950",
+    boxShadow: "0 0 0 2px rgba(250,204,21,0.22), inset 0 1px 0 rgba(255,255,255,0.8)",
   },
 
   clearXRowButton: {
@@ -6575,6 +6907,20 @@ const styles = {
     fontWeight: "950",
     cursor: "pointer",
     boxShadow: "0 0 14px rgba(34,197,94,0.22)",
+  },
+
+  nativeBottomScrollBar: {
+    position: "fixed",
+    left: 0,
+    right: 0,
+    bottom: "72px",
+    height: "18px",
+    zIndex: 999,
+    overflowX: "auto",
+    overflowY: "hidden",
+    background: "#eef6ff",
+    borderTop: "1px solid rgba(148,163,184,0.75)",
+    borderBottom: "1px solid rgba(148,163,184,0.75)",
   },
 
   excelTabsBar: {

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "./supabase";
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid, LineChart, Line, Legend } from "recharts";
 
 const semaines = Array.from({ length: 52 }, (_, i) => i + 1);
 
@@ -10,15 +11,36 @@ const COMPTES_BUDGET = [
   "7570 - Procédures",
 ];
 
+const GRAPH_COLORS = ["#00E5FF", "#35F68B", "#FF8A1F", "#FACC15", "#B45CFF", "#FF4D6D", "#2DD4BF", "#60A5FA", "#F472B6", "#A3E635"];
+
 
 
 function ordonnerComptesBudget(liste = []) {
   const ordreFixe = COMPTES_BUDGET;
-  const uniques = Array.from(new Set([...(liste || []), ...ordreFixe]));
+  const nettoyerIntitule = (compte) =>
+    String(compte || "")
+      .replace(/^\s*\d+\s*-\s*/, "")
+      .trim()
+      .toLowerCase();
 
-  return uniques.sort((a, b) => {
-    const ia = ordreFixe.indexOf(a);
-    const ib = ordreFixe.indexOf(b);
+  // IMPORTANT : on ajoute les comptes par défaut seulement si leur INTITULÉ
+  // n’existe pas déjà. Comme ça, changer seulement le numéro de
+  // "3185 - Enveloppes" en "3190 - Enveloppes" ne recrée plus l'ancien onglet 3185.
+  const resultat = [];
+
+  for (const compte of liste || []) {
+    if (!resultat.includes(compte)) resultat.push(compte);
+  }
+
+  for (const compteFixe of ordreFixe) {
+    const intituleFixe = nettoyerIntitule(compteFixe);
+    const existeDeja = resultat.some((compte) => nettoyerIntitule(compte) === intituleFixe);
+    if (!existeDeja) resultat.push(compteFixe);
+  }
+
+  return resultat.sort((a, b) => {
+    const ia = ordreFixe.findIndex((compte) => nettoyerIntitule(compte) === nettoyerIntitule(a));
+    const ib = ordreFixe.findIndex((compte) => nettoyerIntitule(compte) === nettoyerIntitule(b));
 
     if (ia !== -1 && ib !== -1) return ia - ib;
     if (ia !== -1) return -1;
@@ -220,11 +242,90 @@ function round2(val) {
 }
 
 function formatArgent(val) {
-  const n = round2(Number(val || 0));
-  return `${new Intl.NumberFormat("fr-CA", {
+  return `${round2(val).toFixed(2)} $`;
+}
+
+function CustomTooltipProMax({ active, payload, label }) {
+  if (!active || !payload || !payload.length) return null;
+
+  const item = payload[0];
+  const rawValue = Number(item?.value || 0);
+  const value = `${round2(rawValue).toLocaleString("fr-CA", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(n)} $`;
+  })} $`;
+
+  const name = item?.name || item?.payload?.name || label || "";
+
+  const color =
+    rawValue >= 0
+      ? item?.color || item?.fill || item?.stroke || "#38bdf8"
+      : "#ef4444";
+
+  return (
+    <div
+      style={{
+        minWidth: "170px",
+        background:
+          "linear-gradient(180deg, rgba(2,6,23,0.98) 0%, rgba(15,23,42,0.96) 100%)",
+        border: `1px solid ${color}`,
+        borderRadius: "16px",
+        padding: "12px 14px",
+        color: "#e5f8ff",
+        boxShadow: `0 18px 45px rgba(0,0,0,0.62), 0 0 22px ${color}55`,
+        fontWeight: "900",
+        backdropFilter: "blur(10px)",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "8px",
+          marginBottom: "8px",
+          color: "#cbd5e1",
+          fontSize: "12px",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+        }}
+      >
+        <span
+          style={{
+            width: "9px",
+            height: "9px",
+            borderRadius: "999px",
+            background: color,
+            boxShadow: `0 0 12px ${color}`,
+          }}
+        />
+        {String(name)}
+      </div>
+
+      <div
+        style={{
+          fontSize: "20px",
+          lineHeight: 1,
+          color,
+          textShadow: `0 0 14px ${color}66`,
+        }}
+      >
+        {value}
+      </div>
+
+      {label ? (
+        <div
+          style={{
+            marginTop: "8px",
+            fontSize: "11px",
+            color: "#94a3b8",
+            fontWeight: "800",
+          }}
+        >
+          {String(label)}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function formatNombreInput(val) {
@@ -339,6 +440,7 @@ export default function App() {
   const lastScrollRef = useRef(0);
   const bottomScrollRef = useRef(null);
   const [scrollInfo, setScrollInfo] = useState({ left: 0, max: 1 });
+  const [bottomScrollWidth, setBottomScrollWidth] = useState(3200);
   const [showResetModal, setShowResetModal] = useState(false);
   const [resetPasswordInput, setResetPasswordInput] = useState("");
   const [showGuide, setShowGuide] = useState(() => {
@@ -351,6 +453,7 @@ export default function App() {
   const [blocActif, setBlocActif] = useState(BLOCS_FIXES[0]);
   const [comptesBudget, setComptesBudget] = useState(() => ordonnerComptesBudget(COMPTES_BUDGET));
   const [compteActif, setCompteActif] = useState(COMPTES_BUDGET[0]);
+  const [vueActuelle, setVueActuelle] = useState("budget");
   const [nouveauCompte, setNouveauCompte] = useState("");
   const [dragCompte, setDragCompte] = useState(null);
   const [compteEdition, setCompteEdition] = useState(null);
@@ -390,12 +493,29 @@ export default function App() {
   const [echeanceEditionValue, setEcheanceEditionValue] = useState("");
 
   const [ligneEditionInfo, setLigneEditionInfo] = useState(null);
+  const [ligneDescriptionJaune, setLigneDescriptionJaune] = useState(null);
+  const [descriptionJauneMap, setDescriptionJauneMap] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem("budget_description_jaune_v2") || "{}");
+    } catch {
+      return {};
+    }
+  });
+  const [lignesManuelles3177, setLignesManuelles3177] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("budget_3177_lignes_manuelles_v2") || "[]");
+      return Array.isArray(saved) ? saved : [];
+    } catch {
+      return [];
+    }
+  });
+  const [nouvelleLigneManuelle3177, setNouvelleLigneManuelle3177] = useState("");
+  const [editionManuelle3177Id, setEditionManuelle3177Id] = useState(null);
+  const [editionManuelle3177Texte, setEditionManuelle3177Texte] = useState("");
   const [descriptionEdition, setDescriptionEdition] = useState("");
   const [noteEdition, setNoteEdition] = useState("");
   const [valeurs3177, setValeurs3177] = useState({});
   const [input3177Actif, setInput3177Actif] = useState(null);
-  const [hovered3177RowId, setHovered3177RowId] = useState(null);
-  const [lignesManuelles3177, setLignesManuelles3177] = useState([]);
   const [selectionXRange, setSelectionXRange] = useState(null);
   const [lignesDesactivees, setLignesDesactivees] = useState({});
   const [revenusResume3185, setRevenusResume3185] = useState([]);
@@ -520,7 +640,7 @@ export default function App() {
 
     const ancienCompte = compteActif;
 
-    const nouvelleListe = ordonnerComptesBudget(comptesBudget).map((compte) =>
+    const nouvelleListe = comptesBudget.map((compte) =>
       compte === ancienCompte ? nomFinal : compte
     );
 
@@ -666,7 +786,9 @@ export default function App() {
 
     const ancienneValeur = compteEdition;
 
-    const prochaineListe = ordonnerComptesBudget(comptesBudget).map((c) =>
+    // Remplace le numéro du compte dans la liste EXISTANTE.
+    // Important : ne pas réordonner ici, sinon certains comptes peuvent se dupliquer visuellement.
+    const prochaineListe = comptesBudget.map((c) =>
       c === ancienneValeur ? nouveauNom : c
     );
 
@@ -817,18 +939,32 @@ export default function App() {
         left: table.scrollLeft,
         max,
       });
+      setBottomScrollWidth(table.scrollWidth || 3200);
+
+      if (bottomScrollRef.current && bottomScrollRef.current.scrollLeft !== table.scrollLeft) {
+        bottomScrollRef.current.scrollLeft = table.scrollLeft;
+      }
+    };
+
+    const updateFromBottom = () => {
+      const bottom = bottomScrollRef.current;
+      if (!bottom) return;
+      table.scrollLeft = bottom.scrollLeft;
+      lastScrollRef.current = bottom.scrollLeft;
     };
 
     table.addEventListener("scroll", updateInfo, { passive: true });
+    bottomScrollRef.current?.addEventListener("scroll", updateFromBottom, { passive: true });
     window.addEventListener("resize", updateInfo);
 
     updateInfo();
 
     return () => {
       table.removeEventListener("scroll", updateInfo);
+      bottomScrollRef.current?.removeEventListener("scroll", updateFromBottom);
       window.removeEventListener("resize", updateInfo);
     };
-  }, [data]);
+  }, [data, compteActif]);
 
   useEffect(() => {
     const el = tableScrollRef.current;
@@ -1100,12 +1236,66 @@ export default function App() {
     return session?.user?.id || null;
   }
 
-  function getValeurs3177StorageKey() {
-    return `budget_3177_valeurs_${getUserId() || "anonymous"}`;
+  function toggleDescriptionJaune(id) {
+    if (!id) return;
+    const next = { ...descriptionJauneMap, [id]: !descriptionJauneMap[id] };
+    setDescriptionJauneMap(next);
+    localStorage.setItem("budget_description_jaune_v2", JSON.stringify(next));
   }
 
-  function getLignesManuelles3177StorageKey() {
-    return `budget_3177_lignes_manuelles_${getUserId() || "anonymous"}`;
+  function sauvegarderLignesManuelles3177(next) {
+    setLignesManuelles3177(next);
+    localStorage.setItem("budget_3177_lignes_manuelles_v2", JSON.stringify(next));
+  }
+
+  function ajouterLigneManuelle3177() {
+    const texte = nouvelleLigneManuelle3177.trim();
+    if (!texte) return;
+
+    const id = `manuel-3177-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    sauvegarderLignesManuelles3177([
+      ...lignesManuelles3177,
+      { id, description: texte, bloc: "MANUEL 3177", manuel: true },
+    ]);
+    setNouvelleLigneManuelle3177("");
+  }
+
+  function supprimerLigneManuelle3177(ligne) {
+    if (!ligne?.id) return;
+    const ok = window.confirm(`Supprimer la ligne manuelle "${ligne.description}" ?`);
+    if (!ok) return;
+
+    sauvegarderLignesManuelles3177(lignesManuelles3177.filter((item) => item.id !== ligne.id));
+
+    const nextValeurs = { ...valeurs3177 };
+    delete nextValeurs[ligne.id];
+    sauvegarderValeurs3177(nextValeurs);
+
+    const nextJaune = { ...descriptionJauneMap };
+    delete nextJaune[ligne.id];
+    setDescriptionJauneMap(nextJaune);
+    localStorage.setItem("budget_description_jaune_v2", JSON.stringify(nextJaune));
+  }
+
+  function commencerEditionManuelle3177(ligne) {
+    setEditionManuelle3177Id(ligne.id);
+    setEditionManuelle3177Texte(ligne.description || "");
+  }
+
+  function sauvegarderEditionManuelle3177(ligne) {
+    const texte = editionManuelle3177Texte.trim();
+    if (!texte) return;
+    sauvegarderLignesManuelles3177(
+      lignesManuelles3177.map((item) =>
+        item.id === ligne.id ? { ...item, description: texte } : item
+      )
+    );
+    setEditionManuelle3177Id(null);
+    setEditionManuelle3177Texte("");
+  }
+
+  function getValeurs3177StorageKey() {
+    return `budget_3177_valeurs_${getUserId() || "anonymous"}`;
   }
 
   function getLignesDesactiveesStorageKey() {
@@ -1139,20 +1329,6 @@ export default function App() {
       setValeurs3177(JSON.parse(localStorage.getItem(getValeurs3177StorageKey()) || "{}"));
     } catch {
       setValeurs3177({});
-    }
-  }, [session?.user?.id]);
-
-  useEffect(() => {
-    if (!session?.user?.id) {
-      setLignesManuelles3177([]);
-      return;
-    }
-
-    try {
-      const saved = JSON.parse(localStorage.getItem(getLignesManuelles3177StorageKey()) || "[]");
-      setLignesManuelles3177(Array.isArray(saved) ? saved : []);
-    } catch {
-      setLignesManuelles3177([]);
     }
   }, [session?.user?.id]);
 
@@ -1883,6 +2059,60 @@ export default function App() {
   );
 
   const solde = totalRevenus - totalDepenses;
+
+  const lignesGraphiques = useMemo(() => {
+    return data.filter((item) => item.type !== "revenu");
+  }, [data]);
+
+  const revenusGraphiques = useMemo(() => {
+    const source = compteEstEnveloppes(compteActif) ? revenusResume3185 : data;
+    return source.filter((item) => item.type === "revenu");
+  }, [compteActif, data, revenusResume3185]);
+
+  const graphiqueDepensesParBloc = useMemo(() => {
+    const map = new Map();
+
+    lignesGraphiques.forEach((item) => {
+      const bloc = normaliserBloc(item.bloc || "SANS BLOC");
+      const montantMois = calculerMontants(item).mois;
+      map.set(bloc, round2((map.get(bloc) || 0) + montantMois));
+    });
+
+    return Array.from(map, ([name, value]) => ({ name, value }))
+      .filter((item) => item.value > 0)
+      .sort((a, b) => b.value - a.value);
+  }, [lignesGraphiques]);
+
+  const graphiqueTopDepenses = useMemo(() => {
+    return [...lignesGraphiques]
+      .map((item) => ({
+        name: item.description || "Sans description",
+        value: round2(calculerMontants(item).mois),
+      }))
+      .filter((item) => item.value > 0)
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+  }, [lignesGraphiques]);
+
+  const graphiqueResume = useMemo(() => {
+    const totalRev = revenusGraphiques.reduce((acc, item) => acc + calculerMontants(item).mois, 0);
+    const totalDep = lignesGraphiques.reduce((acc, item) => acc + calculerMontants(item).mois, 0);
+    return [
+      { name: "Revenus", value: round2(totalRev) },
+      { name: "Dépenses", value: round2(totalDep) },
+      { name: "Bénéfices", value: round2(totalRev - totalDep) },
+    ];
+  }, [revenusGraphiques, lignesGraphiques]);
+
+  const graphiqueAccumulation = useMemo(() => {
+    const totalCible = lignesGraphiques.reduce((acc, item) => acc + calculerMontants(item).annee, 0);
+    const totalAccumule = lignesGraphiques.reduce((acc, item) => acc + montantAccumule(item), 0);
+    return [
+      { name: "Objectif annuel", value: round2(totalCible) },
+      { name: "Accumuler", value: round2(totalAccumule) },
+      { name: "Restant", value: round2(Math.max(totalCible - totalAccumule, 0)) },
+    ];
+  }, [lignesGraphiques, valeurs3177, lignesDesactivees]);
   const semaineActuelle = getWeekNumberISO(nowLive);
   const weekHue = (semaineActuelle * 7) % 360;
   const weekGlowColor = `hsl(${weekHue} 95% 58%)`;
@@ -1982,12 +2212,14 @@ export default function App() {
     const lignesDepenses = data.filter((item) => item.type !== "revenu");
     const lignesRevenus = revenusResume3185.filter((item) => item.type === "revenu");
     const dep = totauxListeTransactions(lignesDepenses);
-    const revEntrees = totauxListeTransactions(lignesRevenus);
-    const rev = {
-      semaine: revEntrees.semaine - dep.semaine,
-      mois: revEntrees.mois - dep.mois,
-      annee: revEntrees.annee - dep.annee,
-    };
+    const revBrut = totauxListeTransactions(lignesRevenus);
+const depBrut = totauxListeTransactions(lignesDepenses);
+
+const rev = {
+  semaine: revBrut.semaine - depBrut.semaine,
+  mois: revBrut.mois - depBrut.mois,
+  annee: revBrut.annee - depBrut.annee,
+};
 
     // LOGIQUE COMPTE ENVELOPPE
     // A = montant que je devrais avoir dans le compte enveloppe
@@ -2214,38 +2446,6 @@ export default function App() {
     localStorage.setItem(getValeurs3177StorageKey(), JSON.stringify(nextValues));
   }
 
-  function sauvegarderLignesManuelles3177(nextRows) {
-    setLignesManuelles3177(nextRows);
-    localStorage.setItem(getLignesManuelles3177StorageKey(), JSON.stringify(nextRows));
-  }
-
-  function ajouterLigneManuelle3177() {
-    const id = `manual-3177-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    sauvegarderLignesManuelles3177([
-      ...lignesManuelles3177,
-      { id, description: "Nouvelle ligne manuelle" },
-    ]);
-  }
-
-  function modifierDescriptionLigneManuelle3177(id, description) {
-    sauvegarderLignesManuelles3177(
-      lignesManuelles3177.map((row) =>
-        row.id === id ? { ...row, description } : row
-      )
-    );
-  }
-
-  function supprimerLigneManuelle3177(id) {
-    const ok = window.confirm("Supprimer cette ligne manuelle du compte 3177 ?");
-    if (!ok) return;
-
-    sauvegarderLignesManuelles3177(lignesManuelles3177.filter((row) => row.id !== id));
-
-    const nextValues = { ...valeurs3177 };
-    delete nextValues[id];
-    sauvegarderValeurs3177(nextValues);
-  }
-
   function lireValeur3177(id, champ, defaut = 0) {
     const valeur = valeurs3177?.[id]?.[champ];
     return valeur === undefined || valeur === null || valeur === ""
@@ -2281,7 +2481,7 @@ export default function App() {
       lignesVisibles3185.push(...lignesBloc);
     }
 
-    const lignesSynchronisees = lignesVisibles3185.map((item, index) => {
+    const lignesBase = lignesVisibles3185.map((item, index) => {
       const id = item.id || `ligne-${index}`;
 
       // Correction : le 3177 commence à 0.
@@ -2307,39 +2507,41 @@ export default function App() {
         totalDepenses,
         solde,
         echeance: item.echeance || "",
-        manuel3177: false,
+        manuel: false,
       };
     });
 
-    const lignesManuelles = lignesManuelles3177.map((item, manualIndex) => {
-      const id = item.id || `manual-3177-${manualIndex}`;
+    const lignesManuelles = lignesManuelles3177.map((item, offset) => {
+      const id = item.id || `manuel-3177-${offset}`;
       const gains = round2(lireValeur3177(id, "gains", 0));
       const depenses = Array.from({ length: 7 }, (_, i) =>
         round2(lireValeur3177(id, `depense${i + 1}`, 0))
       );
       const totalDepenses = round2(depenses.reduce((acc, val) => acc + Number(val || 0), 0));
+      const solde = round2(gains - totalDepenses);
 
       return {
         id,
-        index: lignesSynchronisees.length + manualIndex,
-        bloc: "MANUEL 3177",
-        description: item.description || "",
+        index: lignesBase.length + offset,
+        bloc: item.bloc || "MANUEL 3177",
+        description: item.description || "Ligne manuelle",
         gains,
         depenses,
         totalDepenses,
-        solde: round2(gains - totalDepenses),
+        solde,
         echeance: "",
-        manuel3177: true,
+        manuel: true,
       };
     });
 
-    return [...lignesSynchronisees, ...lignesManuelles];
+    return [...lignesBase, ...lignesManuelles];
   }
 
-  function renduInput3177(ligne, champ, valeur, align = "right", extraInputStyle = {}) {
+  function renduInput3177(ligne, champ, valeur, align = "right") {
     const cleInput = `${ligne.id}-${champ}`;
     const valeurSauvee = valeurs3177?.[ligne.id]?.[champ];
     const estActif = input3177Actif === cleInput;
+    const estDepense3177 = String(champ || "").startsWith("depense");
 
     const valeurAffichee = estActif
       ? String(valeurSauvee ?? "")
@@ -2374,7 +2576,7 @@ export default function App() {
         }}
         style={{
           ...styles.bank3177Input,
-          ...extraInputStyle,
+          ...(estDepense3177 ? styles.bank3177InputDepense : {}),
           textAlign: align,
         }}
       />
@@ -2802,19 +3004,26 @@ export default function App() {
               <div style={styles.bank3177Kicker}>Compte miroir automatique</div>
               <div style={styles.bank3177Title}>{compteArgentAccumule || compteActif}</div>
             </div>
-
-            <button
-              type="button"
-              onClick={ajouterLigneManuelle3177}
-              style={styles.bank3177ManualButton}
-              title="Ajouter une ligne uniquement dans Argent accumulé"
-            >
-              + Ligne manuelle
-            </button>
           </div>
 
           <div style={styles.bank3177Note}>
-            Les descriptions sont synchronisées automatiquement avec le compte <strong>{comptePrincipalBudget}</strong>. Les lignes manuelles restent seulement dans le compte 3177.
+            Les descriptions sont synchronisées automatiquement avec le compte <strong>{comptePrincipalBudget}</strong>. Tu peux modifier les gains, entrer jusqu’à 7 dépenses par ligne et ajouter des lignes manuelles indépendantes.
+          </div>
+
+          <div style={styles.bank3177ManualBar}>
+            <span style={styles.bank3177ManualLabel}>Ligne manuelle 3177</span>
+            <input
+              value={nouvelleLigneManuelle3177}
+              onChange={(e) => setNouvelleLigneManuelle3177(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") ajouterLigneManuelle3177();
+              }}
+              placeholder="Ex.: Ajustement manuel, dépôt spécial, correction..."
+              style={styles.bank3177ManualInput}
+            />
+            <button type="button" onClick={ajouterLigneManuelle3177} style={styles.bank3177ManualButton}>
+              + Ajouter
+            </button>
           </div>
 
           <div style={styles.bank3177TableWrap}>
@@ -2854,70 +3063,62 @@ export default function App() {
                         ? "#f0fdf4"
                         : "#ffffff";
 
-                    const ligneSurvolee = hovered3177RowId === ligne.id;
-                    const couleurSurvol = ligneSurvolee ? styles.bank3177RowHover.background : null;
-                    const inputSurvolStyle = ligneSurvolee ? styles.bank3177InputHover : {};
-                    const styleDescription = {
-                      ...styles.bank3177TdDescription,
-                      background: couleurSurvol || sectionColor,
-                    };
-                    const styleGains = {
-                      ...styles.bank3177TdInput,
-                      ...(ligneSurvolee ? styles.bank3177TdHover : {}),
-                    };
-                    const styleDepense = {
-                      ...styles.bank3177TdDepenseInput,
-                      ...(ligneSurvolee ? styles.bank3177TdHover : {}),
-                    };
-                    const styleSolde = {
-                      ...styles.bank3177TdSolde,
-                      ...(ligneSurvolee ? styles.bank3177TdHover : {}),
-                    };
-
                     return (
-                      <tr
-                        key={ligne.id}
-                        onMouseEnter={() => setHovered3177RowId(ligne.id)}
-                        onMouseLeave={() => setHovered3177RowId(null)}
-                      >
-                        <td style={styleDescription}>
+                      <tr key={ligne.id}>
+                        <td style={{ ...styles.bank3177TdDescription, background: sectionColor }}>
                           <span style={styles.bank3177LineNumber}>{ligne.index + 1}</span>
-                          {ligne.manuel3177 ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleDescriptionJaune(ligne.id)}
+                            style={{
+                              ...styles.descriptionStarButton,
+                              ...(descriptionJauneMap[ligne.id] ? styles.descriptionStarButtonOn : {}),
+                            }}
+                            title={descriptionJauneMap[ligne.id] ? "Retirer le jaune" : "Mettre cette ligne en jaune"}
+                          >
+                            {descriptionJauneMap[ligne.id] ? "★" : "☆"}
+                          </button>
+                          {ligne.manuel && editionManuelle3177Id === ligne.id ? (
                             <>
                               <input
-                                value={ligne.description}
-                                onChange={(e) => modifierDescriptionLigneManuelle3177(ligne.id, e.target.value)}
-                                placeholder="Description manuelle"
-                                style={styles.bank3177ManualDescriptionInput}
+                                value={editionManuelle3177Texte}
+                                onChange={(e) => setEditionManuelle3177Texte(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") sauvegarderEditionManuelle3177(ligne);
+                                  if (e.key === "Escape") setEditionManuelle3177Id(null);
+                                }}
+                                style={styles.bank3177DescriptionEditInput}
+                                autoFocus
                               />
-                              <button
-                                type="button"
-                                onClick={() => supprimerLigneManuelle3177(ligne.id)}
-                                style={styles.bank3177ManualDeleteButton}
-                                title="Supprimer la ligne manuelle"
-                              >
-                                ×
-                              </button>
+                              <button type="button" onClick={() => sauvegarderEditionManuelle3177(ligne)} style={styles.saveButton}>✓</button>
+                              <button type="button" onClick={() => setEditionManuelle3177Id(null)} style={styles.cancelButton}>×</button>
                             </>
                           ) : (
-                            <span>{ligne.description}</span>
+                            <>
+                              <span style={descriptionJauneMap[ligne.id] ? styles.descriptionTextYellow : undefined}>
+                                {ligne.description}
+                              </span>
+                              {ligne.manuel ? (
+                                <>
+                                  <button type="button" onClick={() => commencerEditionManuelle3177(ligne)} style={styles.bank3177MiniAction}>✏️</button>
+                                  <button type="button" onClick={() => supprimerLigneManuelle3177(ligne)} style={styles.bank3177MiniDelete}>🗑</button>
+                                </>
+                              ) : null}
+                            </>
                           )}
                         </td>
 
-                        <td style={styleGains}>
-                          {renduInput3177(ligne, "gains", ligne.gains, "right", inputSurvolStyle)}
+                        <td style={styles.bank3177TdInput}>
+                          {renduInput3177(ligne, "gains", ligne.gains)}
                         </td>
 
                         {ligne.depenses.map((valeur, depIndex) => (
-                          <td key={`${ligne.id}-dep-${depIndex}`} style={styleDepense}>
-                            {renduInput3177(ligne, `depense${depIndex + 1}`, valeur, "right", {
-                              ...styles.bank3177InputDepense,
-                              ...inputSurvolStyle,
-                            })}
+                          <td key={`${ligne.id}-dep-${depIndex}`} style={styles.bank3177TdInput}>
+                            {renduInput3177(ligne, `depense${depIndex + 1}`, valeur)}
                           </td>
                         ))}
 
-                        <td style={styleSolde}>
+                        <td style={styles.bank3177TdSolde}>
                           {formatArgent(ligne.solde)}
                         </td>
                       </tr>
@@ -2972,6 +3173,99 @@ export default function App() {
   const afficherTableauDetaille = compteEstEnveloppes(compteActif);
 
 
+  function renduOngletGraphique() {
+    const totalRev = graphiqueResume.find((item) => item.name === "Revenus")?.value || 0;
+    const totalDep = graphiqueResume.find((item) => item.name === "Dépenses")?.value || 0;
+    const beneficeGraph = totalRev - totalDep;
+
+    const renderMoneyTooltip = (value) => formatArgent(value);
+
+    return (
+      <div style={styles.graphPage}>
+        <div style={styles.graphHeroCard}>
+          <div>
+            <div style={styles.graphKicker}>Analyse visuelle</div>
+            <div style={styles.graphTitle}>Graphique du compte enveloppe</div>
+            <div style={styles.graphSubtitle}>Dépenses par catégorie, revenus vs dépenses, top dépenses et progression de l’argent accumulé.</div>
+          </div>
+          <div style={styles.graphHeroStats}>
+            <div style={styles.graphMiniStat}><span>Dépenses / mois</span><strong>{formatArgent(totalDep)}</strong></div>
+            <div style={styles.graphMiniStat}><span>Revenus / mois</span><strong>{formatArgent(totalRev)}</strong></div>
+            <div style={{ ...styles.graphMiniStat, borderColor: beneficeGraph >= 0 ? "rgba(34,197,94,0.45)" : "rgba(239,68,68,0.45)" }}><span>Bénéfices</span><strong style={{ color: beneficeGraph >= 0 ? "#86efac" : "#fca5a5" }}>{formatArgent(beneficeGraph)}</strong></div>
+          </div>
+        </div>
+
+        <div style={styles.graphGridTwo}>
+          <section style={styles.graphCard}>
+            <div style={styles.graphCardTitle}>Dépenses par bloc</div>
+            {graphiqueDepensesParBloc.length ? (
+              <ResponsiveContainer width="100%" height={350}>
+                <PieChart>
+                  <Pie data={graphiqueDepensesParBloc} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={72} outerRadius={125} paddingAngle={4} label={({ name }) => name}>
+                    {graphiqueDepensesParBloc.map((_, index) => <Cell key={index} fill={GRAPH_COLORS[index % GRAPH_COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip content={<CustomTooltipProMax />} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={styles.graphEmpty}>Aucune dépense à afficher.</div>
+            )}
+          </section>
+
+          <section style={styles.graphCard}>
+            <div style={styles.graphCardTitle}>Revenus vs dépenses</div>
+            <ResponsiveContainer width="100%" height={350}>
+              <BarChart data={graphiqueResume}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                <XAxis dataKey="name" stroke="#cbd5e1" />
+                <YAxis stroke="#cbd5e1" />
+                <Tooltip content={<CustomTooltipProMax />} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
+                <Bar dataKey="value" radius={[10, 10, 0, 0]}>
+                  {graphiqueResume.map((_, index) => <Cell key={index} fill={GRAPH_COLORS[index % GRAPH_COLORS.length]} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </section>
+        </div>
+
+        <div style={styles.graphGridTwo}>
+          <section style={styles.graphCard}>
+            <div style={styles.graphCardTitle}>Top 10 dépenses mensuelles</div>
+            {graphiqueTopDepenses.length ? (
+              <ResponsiveContainer width="100%" height={380}>
+                <BarChart data={graphiqueTopDepenses} layout="vertical" margin={{ left: 95, right: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                  <XAxis type="number" stroke="#cbd5e1" />
+                  <YAxis type="category" dataKey="name" stroke="#cbd5e1" width={150} />
+                  <Tooltip content={<CustomTooltipProMax />} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
+                  <Bar dataKey="value" fill="#00E5FF" radius={[0, 10, 10, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div style={styles.graphEmpty}>Aucune dépense à afficher.</div>
+            )}
+          </section>
+
+          <section style={styles.graphCard}>
+            <div style={styles.graphCardTitle}>Objectif annuel vs accumulé</div>
+            <ResponsiveContainer width="100%" height={380}>
+              <LineChart data={graphiqueAccumulation}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                <XAxis dataKey="name" stroke="#cbd5e1" />
+                <YAxis stroke="#cbd5e1" />
+                <Tooltip content={<CustomTooltipProMax />} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
+                <Legend />
+                <Line type="monotone" dataKey="value" name="Montant" stroke="#35F68B" strokeWidth={4} dot={{ r: 6, strokeWidth: 3, fill: "#020617", stroke: "#35F68B" }} activeDot={{ r: 9, strokeWidth: 3, fill: "#00E5FF", stroke: "#ffffff" }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
+
   if (authLoading) {
     return (
       <div style={styles.loginPage}>
@@ -3007,7 +3301,29 @@ export default function App() {
 
           body {
             overflow-x: hidden;
-            overflow-y: hidden;
+            overflow-y: auto;
+          }
+
+          @keyframes graphViewEnter {
+            from {
+              opacity: 0;
+              transform: translateY(12px);
+              filter: blur(3px);
+            }
+            to {
+              opacity: 1;
+              transform: translateY(0);
+              filter: blur(0);
+            }
+          }
+
+          @keyframes graphGlowPulse {
+            0%, 100% {
+              box-shadow: 0 24px 60px rgba(0,0,0,0.34), 0 0 22px rgba(56,189,248,0.10);
+            }
+            50% {
+              box-shadow: 0 24px 60px rgba(0,0,0,0.34), 0 0 42px rgba(56,189,248,0.22);
+            }
           }
 
           @keyframes teslaPulse {
@@ -3115,7 +3431,8 @@ export default function App() {
         }
 
         body {
-          overflow: hidden;
+          overflow-x: hidden;
+          overflow-y: auto;
         }
 
         button {
@@ -3746,6 +4063,28 @@ export default function App() {
         )}
       </div>
 
+        <div style={styles.viewTabsBar}>
+          <button
+            type="button"
+            onClick={() => setVueActuelle("budget")}
+            style={{ ...styles.viewTabButton, ...(vueActuelle === "budget" ? styles.viewTabButtonActive : {}) }}
+          >
+            Budget
+          </button>
+          <button
+            type="button"
+            onClick={() => setVueActuelle("graphique")}
+            style={{ ...styles.viewTabButton, ...(vueActuelle === "graphique" ? styles.viewTabButtonActive : {}) }}
+          >
+            Graphique
+          </button>
+        </div>
+
+        {vueActuelle === "graphique" ? (
+          renduOngletGraphique()
+        ) : (
+          <>
+
         {afficherTableauDetaille ? (
           <>
         <div style={styles.compactProToolbar}>
@@ -3984,8 +4323,29 @@ export default function App() {
                                         {activeLigne ? "ON" : "OFF"}
                                       </button>
                                       <button
-                                        onClick={() => commencerEditionInfo(item)}
-                                        style={{ ...styles.descriptionEditButton, flex: 1 }}
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          toggleDescriptionJaune(item.id);
+                                        }}
+                                        style={{
+                                          ...styles.descriptionStarButton,
+                                          ...(descriptionJauneMap[item.id] ? styles.descriptionStarButtonOn : {}),
+                                        }}
+                                        title={descriptionJauneMap[item.id] ? "Retirer le jaune" : "Mettre cette description en jaune"}
+                                      >
+                                        {descriptionJauneMap[item.id] ? "★" : "☆"}
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setLigneDescriptionJaune(item.id);
+                                          commencerEditionInfo(item);
+                                        }}
+                                        style={{
+                                          ...styles.descriptionEditButton,
+                                          ...(descriptionJauneMap[item.id] ? styles.descriptionEditButtonYellow : {}),
+                                          flex: 1,
+                                        }}
                                         title="Cliquer pour modifier la catégorie / note"
                                       >
                                         {item.description || "-"}
@@ -4319,6 +4679,21 @@ export default function App() {
           </div>
         )}
 
+        {afficherTableauDetaille && (
+          <div
+            ref={bottomScrollRef}
+            style={styles.nativeBottomScrollBar}
+            onScroll={(e) => {
+              const table = tableScrollRef.current;
+              if (!table) return;
+              table.scrollLeft = e.currentTarget.scrollLeft;
+              lastScrollRef.current = e.currentTarget.scrollLeft;
+            }}
+          >
+            <div style={{ width: bottomScrollWidth, height: 1 }} />
+          </div>
+        )}
+
         <div style={styles.excelTabsBar}>
           {ordonnerComptesBudget(comptesBudget).map((compte) => {
             const couleur = couleurCompte(compte);
@@ -4362,46 +4737,8 @@ export default function App() {
           })}
         </div>
 
-        {afficherTableauDetaille && (
-          <div style={styles.financeNavBar}>
-            <div style={styles.financeNavShell}>
-              <button onClick={() => scrollTableTo("start")} style={styles.financeNavButton}>
-                ⏮ Début
-              </button>
 
-              <button onClick={() => scrollTableBy(-700)} style={styles.financeNavButton}>
-                ◀ Gauche
-              </button>
-
-              <div style={styles.financeNavCenter}>
-                <div style={styles.financeNavTopLine}>
-                  <span>Navigation calendrier</span>
-                  <strong>{Math.round((scrollInfo.left / Math.max(scrollInfo.max, 1)) * 100)}%</strong>
-                </div>
-
-                <div style={styles.financeTrackOuter}>
-                  <div
-                    style={{
-                      ...styles.financeTrackFill,
-                      width: `${Math.round((scrollInfo.left / Math.max(scrollInfo.max, 1)) * 100)}%`,
-                    }}
-                  />
-                </div>
-
-                <div ref={bottomScrollRef} style={styles.financeBottomScroll}>
-                  <div style={{ width: "4000px", height: "1px" }} />
-                </div>
-              </div>
-
-              <button onClick={() => scrollTableBy(700)} style={styles.financeNavButton}>
-                Droite ▶
-              </button>
-
-              <button onClick={() => scrollTableTo("end")} style={styles.financeNavButton}>
-                Fin ⏭
-              </button>
-            </div>
-          </div>
+          </>
         )}
       </div>
     </>
@@ -4409,6 +4746,140 @@ export default function App() {
 }
 
 const styles = {
+
+  viewTabsBar: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "12px",
+    margin: "14px auto 24px auto",
+    width: "fit-content",
+    borderRadius: "24px",
+    background: "linear-gradient(180deg, rgba(15,23,42,0.92), rgba(2,6,23,0.96))",
+    border: "1px solid rgba(56,189,248,0.34)",
+    boxShadow: "0 18px 42px rgba(0,0,0,0.38), 0 0 28px rgba(56,189,248,0.12), inset 0 1px 0 rgba(255,255,255,0.08)",
+  },
+
+  viewTabButton: {
+    border: "1px solid rgba(148,163,184,0.28)",
+    borderRadius: "17px",
+    padding: "13px 28px",
+    background: "linear-gradient(180deg, #1e293b 0%, #0f172a 100%)",
+    color: "#e2e8f0",
+    fontWeight: "950",
+    cursor: "pointer",
+    fontSize: "14px",
+    letterSpacing: "0.02em",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.08)",
+    transition: "transform 180ms ease, box-shadow 180ms ease, background 180ms ease, color 180ms ease",
+  },
+
+  viewTabButtonActive: {
+    background: "linear-gradient(135deg, #facc15 0%, #f59e0b 100%)",
+    color: "#111827",
+    borderColor: "rgba(250,204,21,0.95)",
+    boxShadow: "0 12px 32px rgba(250,204,21,0.38), 0 0 18px rgba(250,204,21,0.22), inset 0 1px 0 rgba(255,255,255,0.45)",
+    transform: "translateY(-1px)",
+  },
+
+  graphPage: {
+    maxWidth: "1880px",
+    margin: "0 auto",
+    padding: "10px 20px 220px",
+    minHeight: "calc(100vh - 120px)",
+    overflow: "visible",
+  },
+
+  graphHeroCard: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "18px",
+    alignItems: "stretch",
+    borderRadius: "30px",
+    padding: "28px",
+    marginBottom: "22px",
+    background: "linear-gradient(135deg, rgba(15,23,42,0.98) 0%, rgba(2,6,23,0.98) 54%, rgba(14,165,233,0.28) 100%)",
+    border: "1px solid rgba(56,189,248,0.30)",
+    boxShadow: "0 24px 70px rgba(0,0,0,0.40)",
+  },
+
+  graphKicker: {
+    color: "#38bdf8",
+    textTransform: "uppercase",
+    letterSpacing: "0.22em",
+    fontSize: "12px",
+    fontWeight: "950",
+  },
+
+  graphTitle: {
+    color: "#ffffff",
+    fontSize: "34px",
+    lineHeight: 1.05,
+    fontWeight: "1000",
+    marginTop: "8px",
+  },
+
+  graphSubtitle: {
+    color: "#cbd5e1",
+    fontSize: "15px",
+    marginTop: "8px",
+    maxWidth: "760px",
+  },
+
+  graphHeroStats: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(150px, 1fr))",
+    gap: "12px",
+    minWidth: "520px",
+  },
+
+  graphMiniStat: {
+    borderRadius: "20px",
+    padding: "16px",
+    background: "rgba(15,23,42,0.88)",
+    border: "1px solid rgba(56,189,248,0.20)",
+    display: "flex",
+    flexDirection: "column",
+    gap: "8px",
+    color: "#ffffff",
+  },
+
+  graphGridTwo: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: "22px",
+    marginBottom: "24px",
+  },
+
+  graphCard: {
+    borderRadius: "30px",
+    padding: "22px",
+    minHeight: "500px",
+    background: "rgba(2,6,23,0.86)",
+    border: "1px solid rgba(148,163,184,0.22)",
+    boxShadow: "0 18px 54px rgba(0,0,0,0.34)",
+    overflow: "visible",
+  },
+
+  graphCardTitle: {
+    color: "#ffffff",
+    fontSize: "20px",
+    fontWeight: "1000",
+    marginBottom: "14px",
+  },
+
+  graphEmpty: {
+    height: "330px",
+    borderRadius: "20px",
+    border: "1px dashed rgba(148,163,184,0.35)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#94a3b8",
+    fontWeight: "800",
+  },
+
   bank3177FooterMetric: {
     display: "flex",
     alignItems: "center",
@@ -4503,6 +4974,78 @@ const styles = {
     boxShadow: "0 -10px 28px rgba(0,0,0,0.42), 0 0 24px rgba(14,165,233,0.18)",
   },
 
+  bank3177ManualBar: {
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    padding: "8px 14px",
+    background: "linear-gradient(180deg, #fff7ed 0%, #fef3c7 100%)",
+    borderTop: "1px solid #fdba74",
+    borderBottom: "1px solid #fdba74",
+  },
+
+  bank3177ManualLabel: {
+    color: "#7c2d12",
+    fontWeight: "950",
+    textTransform: "uppercase",
+    fontSize: "12px",
+    whiteSpace: "nowrap",
+  },
+
+  bank3177ManualInput: {
+    flex: 1,
+    height: "28px",
+    borderRadius: "8px",
+    border: "1px solid #f97316",
+    background: "#ffffff",
+    color: "#0f172a",
+    fontWeight: "750",
+    padding: "0 12px",
+    outline: "none",
+  },
+
+  bank3177ManualButton: {
+    minWidth: "92px",
+    height: "30px",
+    borderRadius: "9px",
+    border: "1px solid #ca8a04",
+    background: "linear-gradient(180deg, #fde047 0%, #facc15 100%)",
+    color: "#111827",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "0 0 14px rgba(250,204,21,0.35), inset 0 1px 0 rgba(255,255,255,0.8)",
+  },
+
+  bank3177DescriptionEditInput: {
+    flex: 1,
+    height: "26px",
+    borderRadius: "7px",
+    border: "1px solid #60a5fa",
+    background: "#ffffff",
+    color: "#0f172a",
+    fontWeight: "850",
+    padding: "0 8px",
+    outline: "none",
+  },
+
+  bank3177MiniAction: {
+    marginLeft: "8px",
+    height: "24px",
+    borderRadius: "7px",
+    border: "1px solid #38bdf8",
+    background: "linear-gradient(180deg, #e0f2fe 0%, #bae6fd 100%)",
+    cursor: "pointer",
+  },
+
+  bank3177MiniDelete: {
+    marginLeft: "4px",
+    height: "24px",
+    borderRadius: "7px",
+    border: "1px solid #f87171",
+    background: "linear-gradient(180deg, #fee2e2 0%, #fecaca 100%)",
+    cursor: "pointer",
+  },
+
   bank3177Input: {
     width: "100%",
     height: "24px",
@@ -4518,37 +5061,18 @@ const styles = {
     boxShadow: "inset 0 1px 2px rgba(15,23,42,0.08)",
   },
 
+  bank3177InputDepense: {
+    border: "1px solid #fdba74",
+    background: "linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%)",
+    color: "#7c2d12",
+    boxShadow: "inset 0 0 7px rgba(251,146,60,0.38)",
+  },
+
   bank3177TdInput: {
     border: "1px solid rgba(15,23,42,0.24)",
     padding: "3px 5px",
     background: "#ffffff",
     textAlign: "right",
-  },
-
-  bank3177TdDepenseInput: {
-    border: "1px solid rgba(15,23,42,0.24)",
-    padding: "3px 5px",
-    background: "#e0f2fe",
-    textAlign: "right",
-  },
-
-  bank3177InputDepense: {
-    background: "linear-gradient(180deg, #f0f9ff 0%, #dbeafe 100%)",
-    border: "1px solid #60a5fa",
-  },
-
-  bank3177RowHover: {
-    background: "#fff7cc",
-  },
-
-  bank3177TdHover: {
-    background: "#fff7cc",
-    boxShadow: "inset 0 0 0 2px rgba(245,158,11,0.35)",
-  },
-
-  bank3177InputHover: {
-    background: "linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%)",
-    border: "1px solid #f59e0b",
   },
 
   bank3177SubTh: {
@@ -4720,48 +5244,11 @@ const styles = {
   bank3177Header: {
     display: "flex",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     gap: "16px",
     padding: "14px 18px",
     background: "linear-gradient(180deg, #0f172a 0%, #111827 100%)",
     borderBottom: "1px solid rgba(147,197,253,0.30)",
-  },
-
-  bank3177ManualButton: {
-    height: "34px",
-    padding: "0 14px",
-    borderRadius: "10px",
-    border: "1px solid rgba(34,211,238,0.65)",
-    background: "linear-gradient(180deg, #0284c7 0%, #0369a1 100%)",
-    color: "#ffffff",
-    fontWeight: "950",
-    fontSize: "12px",
-    cursor: "pointer",
-    boxShadow: "0 0 16px rgba(14,165,233,0.28)",
-  },
-
-  bank3177ManualDescriptionInput: {
-    flex: 1,
-    minWidth: 0,
-    height: "22px",
-    border: "0",
-    outline: "0",
-    background: "transparent",
-    color: "#0f172a",
-    fontWeight: "700",
-    fontSize: "12px",
-  },
-
-  bank3177ManualDeleteButton: {
-    width: "22px",
-    height: "22px",
-    borderRadius: "7px",
-    border: "1px solid #fecaca",
-    background: "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)",
-    color: "#ffffff",
-    fontWeight: "950",
-    lineHeight: "18px",
-    cursor: "pointer",
   },
 
   bank3177Shell: {
@@ -4878,9 +5365,39 @@ const styles = {
     boxShadow: "inset 0 1px 0 rgba(255,255,255,0.75)",
   },
 
+  descriptionStarButton: {
+    width: "28px",
+    minWidth: "28px",
+    height: "24px",
+    borderRadius: "7px",
+    border: "1px solid rgba(148,163,184,0.65)",
+    background: "linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%)",
+    color: "#64748b",
+    fontWeight: "950",
+    cursor: "pointer",
+    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.9)",
+  },
+
+  descriptionStarButtonOn: {
+    background: "linear-gradient(180deg, #fde047 0%, #eab308 100%)",
+    border: "1px solid #ca8a04",
+    color: "#111827",
+    boxShadow: "0 0 12px rgba(250,204,21,0.65), inset 0 1px 0 rgba(255,255,255,0.8)",
+  },
+
+  descriptionTextYellow: {
+    background: "linear-gradient(180deg, #fef08a 0%, #facc15 100%)",
+    border: "1px solid #eab308",
+    borderRadius: "6px",
+    padding: "2px 6px",
+    color: "#111827",
+    fontWeight: "950",
+    boxShadow: "0 0 10px rgba(250,204,21,0.40)",
+  },
+
   descriptionEditButton: {
     minHeight: "24px",
-    maxWidth: "calc(100% - 70px)",
+    maxWidth: "calc(100% - 105px)",
     padding: "2px 6px",
     border: "1px solid rgba(15,23,42,0.18)",
     background: "#ffffff",
@@ -4893,6 +5410,15 @@ const styles = {
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
     textAlign: "left",
+    transition: "background 160ms ease, border-color 160ms ease, box-shadow 160ms ease",
+  },
+
+  descriptionEditButtonYellow: {
+    background: "linear-gradient(180deg, #fef08a 0%, #facc15 100%)",
+    border: "1px solid #eab308",
+    color: "#111827",
+    fontWeight: "950",
+    boxShadow: "0 0 0 2px rgba(250,204,21,0.22), inset 0 1px 0 rgba(255,255,255,0.8)",
   },
 
   clearXRowButton: {
@@ -5467,8 +5993,10 @@ const styles = {
     background: "#020817",
     color: "#e5e7eb",
     paddingTop: "88px",
-    paddingBottom: "132px",
+    paddingBottom: "240px",
     position: "relative",
+    overflowX: "hidden",
+    overflowY: "visible",
   },
 
   title: {
@@ -6357,6 +6885,20 @@ const styles = {
     fontWeight: "950",
     cursor: "pointer",
     boxShadow: "0 0 14px rgba(34,197,94,0.22)",
+  },
+
+  nativeBottomScrollBar: {
+    position: "fixed",
+    left: 0,
+    right: 0,
+    bottom: "72px",
+    height: "18px",
+    zIndex: 999,
+    overflowX: "auto",
+    overflowY: "hidden",
+    background: "#eef6ff",
+    borderTop: "1px solid rgba(148,163,184,0.75)",
+    borderBottom: "1px solid rgba(148,163,184,0.75)",
   },
 
   excelTabsBar: {
