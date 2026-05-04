@@ -3199,35 +3199,13 @@ const rev = {
           <section style={styles.graphCard}>
             <div style={styles.graphCardTitle}>Dépenses par bloc</div>
             {graphiqueDepensesParBloc.length ? (
-              <ResponsiveContainer width="100%" height={430}>
-                <PieChart margin={{ top: 0, right: 20, bottom: 95, left: 20 }}>
-                  <Pie
-                    data={graphiqueDepensesParBloc}
-                    dataKey="value"
-                    nameKey="name"
-                    cx="50%"
-                    cy="53%"
-                    innerRadius={72}
-                    outerRadius={125}
-                    paddingAngle={4}
-                    label={({ name, x, y, fill }) => (
-                      <text x={x} y={y + 24} fill={fill} fontSize={13} fontWeight={800} textAnchor={x > 340 ? "start" : "end"}>
-                        {name}
-                      </text>
-                    )}
-                  >
+              <ResponsiveContainer width="100%" height={350}>
+                <PieChart>
+                  <Pie data={graphiqueDepensesParBloc} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={72} outerRadius={125} paddingAngle={4} label={({ name }) => name}>
                     {graphiqueDepensesParBloc.map((_, index) => <Cell key={index} fill={GRAPH_COLORS[index % GRAPH_COLORS.length]} />)}
                   </Pie>
                   <Tooltip content={<CustomTooltipProMax />} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
-                  <Legend
-                    verticalAlign="bottom"
-                    align="center"
-                    wrapperStyle={{
-                      paddingTop: "42px",
-                      transform: "translateY(52px)",
-                      lineHeight: "22px",
-                    }}
-                  />
+                  <Legend />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
