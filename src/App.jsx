@@ -3231,28 +3231,7 @@ function construireTableau3177() {
   </span>
 ) : null}
 
-<button
-  type="button"
-  onClick={() => incrementerGain3177(ligne)}
-  title="Incrémenter"
-  style={{
-    marginLeft: 4,
-    width: 26,
-    height: 26,
-    borderRadius: 6,
-    border: "1px solid #22c55e",
-    background: "#bbf7d0",
-    color: "#166534",
-    fontWeight: "bold",
-    fontSize: 18,
-    cursor: "pointer",
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-  }}
->
-  +
-</button>
+
 
                                   <button type="button" onClick={() => supprimerLigneManuelle3177(ligne)} style={styles.bank3177MiniDelete}>🗑</button>
                                 </>
