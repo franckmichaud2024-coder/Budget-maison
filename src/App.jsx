@@ -2510,6 +2510,29 @@ const rev = {
     sauvegarderValeurs3177(nextValues);
   }
 
+  function decrementerGain3177(ligne) {
+    const montant = montantIncrement3177(ligne);
+    if (!montant) return;
+
+    const actuel = Number(
+      (valeurs3177?.[ligne.id]?.gains ?? ligne.gains ?? 0)
+        .toString()
+        .replace(",", ".")
+    ) || 0;
+
+    const nouveau = Math.max(0, actuel - montant).toFixed(2);
+
+    const nextValues = {
+      ...valeurs3177,
+      [ligne.id]: {
+        ...(valeurs3177[ligne.id] || {}),
+        gains: nouveau,
+      },
+    };
+
+    sauvegarderValeurs3177(nextValues);
+  }
+
 function construireTableau3177() {
     // IMPORTANT :
     // Le 3177 doit afficher exactement les mêmes lignes que le tableau visible du 3185.
@@ -3143,6 +3166,70 @@ function construireTableau3177() {
                               {ligne.manuel ? (
                                 <>
                                   <button type="button" onClick={() => commencerEditionManuelle3177(ligne)} style={styles.bank3177MiniAction}>✏️</button>
+{montantIncrement3177(ligne) > 0 ? (
+  <span
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 3,
+      marginLeft: 6,
+      padding: "2px",
+      borderRadius: 9,
+      background: "linear-gradient(180deg, #f8fafc, #e2e8f0)",
+      border: "1px solid rgba(15,23,42,0.18)",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.85), 0 1px 3px rgba(15,23,42,0.12)",
+      verticalAlign: "middle",
+    }}
+  >
+    <button
+      type="button"
+      onClick={() => decrementerGain3177(ligne)}
+      title={`Retirer ${formatArgent(montantIncrement3177(ligne))}`}
+      style={{
+        width: 24,
+        height: 24,
+        borderRadius: 7,
+        border: "1px solid rgba(239,68,68,0.65)",
+        background: "linear-gradient(180deg, #fee2e2, #fca5a5)",
+        color: "#991b1b",
+        fontWeight: 950,
+        fontSize: 17,
+        cursor: "pointer",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        lineHeight: 1,
+        padding: 0,
+      }}
+    >
+      −
+    </button>
+
+    <button
+      type="button"
+      onClick={() => incrementerGain3177(ligne)}
+      title={`Ajouter ${formatArgent(montantIncrement3177(ligne))}`}
+      style={{
+        width: 24,
+        height: 24,
+        borderRadius: 7,
+        border: "1px solid rgba(34,197,94,0.65)",
+        background: "linear-gradient(180deg, #dcfce7, #86efac)",
+        color: "#065f46",
+        fontWeight: 950,
+        fontSize: 17,
+        cursor: "pointer",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        lineHeight: 1,
+        padding: 0,
+      }}
+    >
+      +
+    </button>
+  </span>
+) : null}
 
 <button
   type="button"
