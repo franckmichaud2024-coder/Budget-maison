@@ -2468,7 +2468,49 @@ const rev = {
     sauvegarderValeurs3177(nextValues);
   }
 
-  function construireTableau3177() {
+  
+  function normaliserTexteIncrement3177(texte) {
+    return String(texte || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase();
+  }
+
+  function montantIncrement3177(ligne) {
+    const desc = normaliserTexteIncrement3177(ligne?.description);
+
+    if (desc.includes("HYDRO")) return 81;
+    if (desc.includes("VIDEOTRON")) return 39.23;
+    if (desc.includes("PONT A25") || desc.includes("A25")) return 25;
+    if (desc.includes("CELI")) return 15;
+
+    return 0;
+  }
+
+  function incrementerGain3177(ligne) {
+    const montant = montantIncrement3177(ligne);
+    if (!montant) return;
+
+    const actuel = Number(
+      (valeurs3177?.[ligne.id]?.gains ?? ligne.gains ?? 0)
+        .toString()
+        .replace(",", ".")
+    ) || 0;
+
+    const nouveau = (actuel + montant).toFixed(2);
+
+    const nextValues = {
+      ...valeurs3177,
+      [ligne.id]: {
+        ...(valeurs3177[ligne.id] || {}),
+        gains: nouveau,
+      },
+    };
+
+    sauvegarderValeurs3177(nextValues);
+  }
+
+function construireTableau3177() {
     // IMPORTANT :
     // Le 3177 doit afficher exactement les mêmes lignes que le tableau visible du 3185.
     // On filtre donc avec BLOCS_FIXES, puis on garde l'ordre par bloc comme dans groupesFiltres.
@@ -3101,6 +3143,30 @@ const rev = {
                               {ligne.manuel ? (
                                 <>
                                   <button type="button" onClick={() => commencerEditionManuelle3177(ligne)} style={styles.bank3177MiniAction}>✏️</button>
+
+<button
+  type="button"
+  onClick={() => incrementerGain3177(ligne)}
+  title="Incrémenter"
+  style={{
+    marginLeft: 4,
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    border: "1px solid #22c55e",
+    background: "#bbf7d0",
+    color: "#166534",
+    fontWeight: "bold",
+    fontSize: 18,
+    cursor: "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+  }}
+>
+  +
+</button>
+
                                   <button type="button" onClick={() => supprimerLigneManuelle3177(ligne)} style={styles.bank3177MiniDelete}>🗑</button>
                                 </>
                               ) : null}
