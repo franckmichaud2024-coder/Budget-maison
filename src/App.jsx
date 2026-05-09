@@ -515,6 +515,7 @@ export default function App() {
   const [descriptionEdition, setDescriptionEdition] = useState("");
   const [noteEdition, setNoteEdition] = useState("");
   const [valeurs3177, setValeurs3177] = useState({});
+  const [increments3177, setIncrements3177] = useState({});
   const [input3177Actif, setInput3177Actif] = useState(null);
   const [selectionXRange, setSelectionXRange] = useState(null);
   const [lignesDesactivees, setLignesDesactivees] = useState({});
@@ -1298,6 +1299,10 @@ export default function App() {
     return `budget_3177_valeurs_${getUserId() || "anonymous"}`;
   }
 
+  function getIncrements3177StorageKey() {
+    return `budget_3177_increments_${getUserId() || "anonymous"}`;
+  }
+
   function getLignesDesactiveesStorageKey() {
     return `budget_3185_lignes_desactivees_${getUserId() || "anonymous"}`;
   }
@@ -1329,6 +1334,19 @@ export default function App() {
       setValeurs3177(JSON.parse(localStorage.getItem(getValeurs3177StorageKey()) || "{}"));
     } catch {
       setValeurs3177({});
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setIncrements3177({});
+      return;
+    }
+
+    try {
+      setIncrements3177(JSON.parse(localStorage.getItem(getIncrements3177StorageKey()) || "{}"));
+    } catch {
+      setIncrements3177({});
     }
   }, [session?.user?.id]);
 
@@ -2476,7 +2494,7 @@ const rev = {
       .toUpperCase();
   }
 
-  function montantIncrement3177(ligne) {
+  function montantIncrement3177Defaut(ligne) {
     const desc = normaliserTexteIncrement3177(ligne?.description);
 
     if (desc.includes("HYDRO")) return 81;
@@ -2485,6 +2503,35 @@ const rev = {
     if (desc.includes("CELI")) return 15;
 
     return 0;
+  }
+
+  function montantIncrement3177(ligne) {
+    const defaut = montantIncrement3177Defaut(ligne);
+    if (!defaut || !ligne?.id) return defaut;
+
+    const valeur = increments3177?.[ligne.id];
+
+    if (valeur === undefined || valeur === null || valeur === "") {
+      return defaut;
+    }
+
+    const nombre = Number(String(valeur).replace(",", "."));
+    return Number.isFinite(nombre) && nombre > 0 ? round2(nombre) : defaut;
+  }
+
+  function sauvegarderIncrement3177(ligne, valeur) {
+    if (!ligne?.id) return;
+
+    const texte = String(valeur || "").replace(",", ".");
+    if (texte !== "" && !/^\d*\.?\d*$/.test(texte)) return;
+
+    const next = {
+      ...increments3177,
+      [ligne.id]: texte,
+    };
+
+    setIncrements3177(next);
+    localStorage.setItem(getIncrements3177StorageKey(), JSON.stringify(next));
   }
 
   function incrementerGain3177(ligne) {
@@ -3181,6 +3228,34 @@ function construireTableau3177() {
       verticalAlign: "middle",
     }}
   >
+    <input
+      value={increments3177?.[ligne.id] ?? montantIncrement3177Defaut(ligne).toFixed(2)}
+      onChange={(e) => sauvegarderIncrement3177(ligne, e.target.value)}
+      onBlur={(e) => {
+        const valeur = Number(String(e.target.value).replace(",", "."));
+        sauvegarderIncrement3177(
+          ligne,
+          Number.isFinite(valeur) && valeur > 0
+            ? round2(valeur).toFixed(2)
+            : montantIncrement3177Defaut(ligne).toFixed(2)
+        );
+      }}
+      title="Montant ajouté ou retiré à chaque clic"
+      style={{
+        width: 54,
+        height: 24,
+        borderRadius: 7,
+        border: "1px solid rgba(245,158,11,0.70)",
+        background: "linear-gradient(180deg, #fef3c7, #fde68a)",
+        color: "#78350f",
+        fontWeight: 950,
+        fontSize: 12,
+        textAlign: "center",
+        padding: "0 4px",
+        outline: "none",
+      }}
+    />
+
     <button
       type="button"
       onClick={() => decrementerGain3177(ligne)}
