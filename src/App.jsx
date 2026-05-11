@@ -52,6 +52,7 @@ function ordonnerComptesBudget(liste = []) {
 
 const SNAPSHOT_KEY = "budget_maison_snapshots_v1";
 const RESET_PASSWORD = "1234"; // Change ce mot de passe ici
+// VERSION: 3177 lignes manuelles + montants synchronisés avec Supabase
 // Login sécurisé via Supabase Auth
 
 function lireSnapshots() {
@@ -501,14 +502,7 @@ export default function App() {
       return {};
     }
   });
-  const [lignesManuelles3177, setLignesManuelles3177] = useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("budget_3177_lignes_manuelles_v2") || "[]");
-      return Array.isArray(saved) ? saved : [];
-    } catch {
-      return [];
-    }
-  });
+  const [lignesManuelles3177, setLignesManuelles3177] = useState([]);
   const [nouvelleLigneManuelle3177, setNouvelleLigneManuelle3177] = useState("");
   const [editionManuelle3177Id, setEditionManuelle3177Id] = useState(null);
   const [editionManuelle3177Texte, setEditionManuelle3177Texte] = useState("");
@@ -922,8 +916,60 @@ export default function App() {
     loadBlocs();
     loadData();
     loadRevenusResume3185();
+    loadLignesManuelles3177();
     setSnapshots(lireSnapshots());
   }, [compteActif, session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const { valeurs, increments } = extraireValeurs3177DepuisSupabase([
+      ...data,
+      ...lignesManuelles3177,
+    ]);
+
+    if (Object.keys(valeurs).length > 0) {
+      setValeurs3177((prev) => ({
+        ...prev,
+        ...valeurs,
+      }));
+    }
+
+    if (Object.keys(increments).length > 0) {
+      setIncrements3177((prev) => ({
+        ...prev,
+        ...increments,
+      }));
+    }
+  }, [data, lignesManuelles3177, session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    const channel = supabase
+      .channel(`budget-3177-manuel-sync-${session.user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "budget_transactions",
+        },
+        () => {
+          console.log("REALTIME REÇU budget_transactions");
+          loadData();
+          loadRevenusResume3185();
+          loadLignesManuelles3177();
+        }
+      )
+      .subscribe((status) => {
+        console.log("REALTIME STATUS:", status);
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id, compteActif]);
 
   useEffect(() => {
     const timer = setInterval(() => setNowLive(new Date()), 60000);
@@ -1244,29 +1290,101 @@ export default function App() {
     localStorage.setItem("budget_description_jaune_v2", JSON.stringify(next));
   }
 
-  function sauvegarderLignesManuelles3177(next) {
-    setLignesManuelles3177(next);
-    localStorage.setItem("budget_3177_lignes_manuelles_v2", JSON.stringify(next));
+  async function loadLignesManuelles3177() {
+    const userId = getUserId();
+
+    if (!userId) {
+      setLignesManuelles3177([]);
+      return [];
+    }
+
+    const compte3177 = trouverCompteParIntitule("Argent accumulé") || "3177 - Argent accumulé";
+
+    const { data: lignes, error } = await supabase
+      .from("budget_transactions")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("compte", compte3177)
+      .eq("bloc", "MANUEL 3177")
+      .order("date", { ascending: true });
+
+    if (error) {
+      console.error("Erreur chargement lignes manuelles 3177:", error);
+      setErreur(`Erreur chargement 3177 : ${error.message}`);
+      return [];
+    }
+
+    const normalisees = (lignes || []).map((item) => ({
+      ...item,
+      manuel: true,
+      bloc: "MANUEL 3177",
+    }));
+
+    setLignesManuelles3177(normalisees);
+    return normalisees;
   }
 
-  function ajouterLigneManuelle3177() {
+  async function sauvegarderLignesManuelles3177() {
+    await loadLignesManuelles3177();
+  }
+
+  async function ajouterLigneManuelle3177() {
     const texte = nouvelleLigneManuelle3177.trim();
     if (!texte) return;
 
-    const id = `manuel-3177-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    sauvegarderLignesManuelles3177([
-      ...lignesManuelles3177,
-      { id, description: texte, bloc: "MANUEL 3177", manuel: true },
-    ]);
+    if (!getUserId()) {
+      setErreur("Session Supabase introuvable. Déconnecte-toi puis reconnecte-toi.");
+      return;
+    }
+
+    const compte3177 = trouverCompteParIntitule("Argent accumulé") || "3177 - Argent accumulé";
+
+    console.log("INSERT ligne manuelle 3177 Supabase", { texte, compte3177 });
+
+    const { data: insertedData, error } = await supabase
+      .from("budget_transactions")
+      .insert([
+        {
+          user_id: getUserId(),
+          compte: compte3177,
+          bloc: "MANUEL 3177",
+          description: texte,
+          montant: 0,
+          mode: "semaine",
+          type: "depense",
+          echeance: null,
+          semaines_payees: [],
+          date: new Date().toISOString(),
+        },
+      ])
+      .select();
+
+    console.log("RÉPONSE INSERT ligne manuelle 3177", { insertedData, error });
+
+    if (error) {
+      setErreur(`Erreur ajout ligne manuelle 3177 : ${error.message}`);
+      return;
+    }
+
     setNouvelleLigneManuelle3177("");
+    await loadLignesManuelles3177();
   }
 
-  function supprimerLigneManuelle3177(ligne) {
+  async function supprimerLigneManuelle3177(ligne) {
     if (!ligne?.id) return;
     const ok = window.confirm(`Supprimer la ligne manuelle "${ligne.description}" ?`);
     if (!ok) return;
 
-    sauvegarderLignesManuelles3177(lignesManuelles3177.filter((item) => item.id !== ligne.id));
+    const { error } = await supabase
+      .from("budget_transactions")
+      .delete()
+      .eq("id", ligne.id)
+      .eq("user_id", getUserId());
+
+    if (error) {
+      setErreur(`Erreur suppression ligne manuelle 3177 : ${error.message}`);
+      return;
+    }
 
     const nextValeurs = { ...valeurs3177 };
     delete nextValeurs[ligne.id];
@@ -1276,6 +1394,8 @@ export default function App() {
     delete nextJaune[ligne.id];
     setDescriptionJauneMap(nextJaune);
     localStorage.setItem("budget_description_jaune_v2", JSON.stringify(nextJaune));
+
+    await loadLignesManuelles3177();
   }
 
   function commencerEditionManuelle3177(ligne) {
@@ -1283,16 +1403,24 @@ export default function App() {
     setEditionManuelle3177Texte(ligne.description || "");
   }
 
-  function sauvegarderEditionManuelle3177(ligne) {
+  async function sauvegarderEditionManuelle3177(ligne) {
     const texte = editionManuelle3177Texte.trim();
     if (!texte) return;
-    sauvegarderLignesManuelles3177(
-      lignesManuelles3177.map((item) =>
-        item.id === ligne.id ? { ...item, description: texte } : item
-      )
-    );
+
+    const { error } = await supabase
+      .from("budget_transactions")
+      .update({ description: texte })
+      .eq("id", ligne.id)
+      .eq("user_id", getUserId());
+
+    if (error) {
+      setErreur(`Erreur modification ligne manuelle 3177 : ${error.message}`);
+      return;
+    }
+
     setEditionManuelle3177Id(null);
     setEditionManuelle3177Texte("");
+    await loadLignesManuelles3177();
   }
 
   function getValeurs3177StorageKey() {
@@ -2473,6 +2601,129 @@ const rev = {
     );
   }
 
+  function lireCommentaireObjet3177(commentaire) {
+    if (!commentaire) return {};
+
+    if (typeof commentaire === "object") {
+      return commentaire || {};
+    }
+
+    if (typeof commentaire === "string") {
+      try {
+        const parsed = JSON.parse(commentaire);
+        return parsed && typeof parsed === "object" ? parsed : {};
+      } catch {
+        return {};
+      }
+    }
+
+    return {};
+  }
+
+  function trouverLigne3177ParId(id) {
+    return (
+      data.find((item) => String(item.id) === String(id)) ||
+      lignesManuelles3177.find((item) => String(item.id) === String(id)) ||
+      null
+    );
+  }
+
+  function extraireValeurs3177DepuisSupabase(lignes = []) {
+    const valeurs = {};
+    const increments = {};
+
+    for (const item of lignes) {
+      if (!item?.id) continue;
+
+      const commentaireObj = lireCommentaireObjet3177(item.commentaire);
+      const valeursCloud = commentaireObj.valeurs3177;
+
+      if (valeursCloud && typeof valeursCloud === "object") {
+        valeurs[item.id] = {
+          ...(valeurs[item.id] || {}),
+          ...valeursCloud,
+        };
+      }
+
+      if (
+        commentaireObj.increment3177 !== undefined &&
+        commentaireObj.increment3177 !== null &&
+        commentaireObj.increment3177 !== ""
+      ) {
+        increments[item.id] = commentaireObj.increment3177;
+      }
+    }
+
+    return { valeurs, increments };
+  }
+
+  async function synchroniserValeur3177AvecSupabase(id, champ, valeur) {
+    if (!id || !getUserId()) return;
+
+    const ligne = trouverLigne3177ParId(id);
+
+    if (!ligne?.id) {
+      console.warn("SYNC 3177 BLOQUÉE : ligne introuvable", { id, champ, valeur });
+      return;
+    }
+
+    const commentaireActuel = lireCommentaireObjet3177(ligne.commentaire);
+    const valeursActuelles = commentaireActuel.valeurs3177 || {};
+
+    const prochainCommentaire = {
+      ...commentaireActuel,
+      valeurs3177: {
+        ...valeursActuelles,
+        [champ]: valeur,
+      },
+    };
+
+    console.log("SYNC MONTANT 3177 -> SUPABASE", { id, champ, valeur });
+
+    const { error } = await supabase
+      .from("budget_transactions")
+      .update({ commentaire: JSON.stringify(prochainCommentaire) })
+      .eq("id", id)
+      .eq("user_id", getUserId());
+
+    if (error) {
+      console.error("ERREUR SYNC MONTANT 3177", error);
+      setErreur(`Erreur synchro montant 3177 : ${error.message}`);
+      return;
+    }
+
+    console.log("SYNC MONTANT 3177 OK");
+  }
+
+  async function synchroniserIncrement3177AvecSupabase(id, valeur) {
+    if (!id || !getUserId()) return;
+
+    const ligne = trouverLigne3177ParId(id);
+
+    if (!ligne?.id) {
+      console.warn("SYNC INCREMENT 3177 BLOQUÉE : ligne introuvable", { id, valeur });
+      return;
+    }
+
+    const commentaireActuel = lireCommentaireObjet3177(ligne.commentaire);
+
+    const prochainCommentaire = {
+      ...commentaireActuel,
+      increment3177: valeur,
+    };
+
+    const { error } = await supabase
+      .from("budget_transactions")
+      .update({ commentaire: JSON.stringify(prochainCommentaire) })
+      .eq("id", id)
+      .eq("user_id", getUserId());
+
+    if (error) {
+      console.error("ERREUR SYNC INCREMENT 3177", error);
+      setErreur(`Erreur synchro incrément 3177 : ${error.message}`);
+    }
+  }
+
   function sauvegarderValeurs3177(nextValues) {
     setValeurs3177(nextValues);
     localStorage.setItem(getValeurs3177StorageKey(), JSON.stringify(nextValues));
@@ -2498,6 +2749,7 @@ const rev = {
     };
 
     sauvegarderValeurs3177(nextValues);
+    synchroniserValeur3177AvecSupabase(id, champ, cleanValue);
   }
 
   
@@ -2546,6 +2798,7 @@ const rev = {
 
     setIncrements3177(next);
     localStorage.setItem(getIncrements3177StorageKey(), JSON.stringify(next));
+    synchroniserIncrement3177AvecSupabase(ligne.id, texte);
   }
 
   function incrementerGain3177(ligne) {
@@ -2569,6 +2822,7 @@ const rev = {
     };
 
     sauvegarderValeurs3177(nextValues);
+    synchroniserValeur3177AvecSupabase(ligne.id, "gains", nouveau);
   }
 
   function decrementerGain3177(ligne) {
@@ -2592,6 +2846,7 @@ const rev = {
     };
 
     sauvegarderValeurs3177(nextValues);
+    synchroniserValeur3177AvecSupabase(ligne.id, "gains", nouveau);
   }
 
 function construireTableau3177() {
