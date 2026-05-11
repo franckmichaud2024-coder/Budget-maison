@@ -1462,6 +1462,20 @@ export default function App() {
   function estPayee(item, semaine) {
     return semainesPayees(item).includes(semaine);
   }
+  function estProchaineSemaineACocher(item, semaine) {
+    const serie = semainesAfficheesPourLigne(item).map(Number);
+    const payeesSet = new Set(semainesPayees(item).map(Number));
+    const semaineNumber = Number(semaine);
+
+    if (payeesSet.has(semaineNumber)) return false;
+
+    const prochainIndex = serie.findIndex((s) => !payeesSet.has(Number(s)));
+
+    if (prochainIndex === -1) return false;
+
+    return Number(serie[prochainIndex]) === semaineNumber;
+  }
+
 
   function montantAccumuleBrut(item) {
     return semainesPayees(item).length * calculerMontants(item).semaine;
@@ -4757,6 +4771,7 @@ function construireTableau3177() {
                                 {serieSemaines.map((semaine) => {
                                   const payee = estPayee(item, semaine);
                                   const isEcheance = Number(item.echeance) === semaine;
+                                  const isOngletEnveloppes = compteEstEnveloppes(compteActif);
 
                                   return (
                                     <td
@@ -4764,14 +4779,18 @@ function construireTableau3177() {
                                       title={selectionXRange?.id === item.id ? `Clique pour remplir de la semaine ${selectionXRange.semaine} à ${semaine}` : `Semaine ${semaine}`}
                                       style={{
                                         ...styles.weekTopCell,
-                                        background: payee
+                                        background: isOngletEnveloppes
+                                          ? payee
+                                            ? "#ff1b1b"
+                                            : "#ffffff"
+                                          : payee
                                           ? isDepense
                                             ? "#ff1b1b"
                                             : "#0058ff"
                                           : isEcheance
                                           ? "#c6e0b4"
                                           : "#ffffff",
-                                        color: payee ? "#000" : "#000",
+                                        color: "#020617",
                                         outline: "none",
                                       }}
                                     >
@@ -4799,6 +4818,8 @@ function construireTableau3177() {
                                 {serieSemaines.map((semaine) => {
                                   const payee = estPayee(item, semaine);
                                   const isEcheance = Number(item.echeance) === semaine;
+                                  const prochaine = estProchaineSemaineACocher(item, semaine);
+                                  const isOngletEnveloppes = compteEstEnveloppes(compteActif);
 
                                   return (
                                     <td
@@ -4807,13 +4828,20 @@ function construireTableau3177() {
                                       title={`Semaine ${semaine}`}
                                       style={{
                                         ...styles.weekCell,
-                                        background: payee
+                                        background: isOngletEnveloppes
+                                          ? payee
+                                            ? "#ffffff"
+                                            : prochaine
+                                            ? "#ffff00"
+                                            : "#ffffff"
+                                          : payee
                                           ? isDepense
                                             ? "#ff1b1b"
                                             : "#0058ff"
                                           : isEcheance
                                           ? "#c6e0b4"
                                           : "#ffffff",
+                                        color: isOngletEnveloppes ? "#020617" : "#020617",
                                         outline: "none",
                                       }}
                                     >
@@ -7864,7 +7892,7 @@ const styles = {
     padding: 0,
     userSelect: "none",
     background: "#ffffff",
-    color: "#111827",
+    color: "#020617",
   },
 
   weekCell: {
@@ -7881,7 +7909,7 @@ const styles = {
     cursor: "pointer",
     userSelect: "none",
     background: "#ffffff",
-    color: "#111827",
+    color: "#020617",
   },
 
   deleteButton: {
