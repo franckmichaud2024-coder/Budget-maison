@@ -1785,7 +1785,6 @@ export default function App() {
 
     localStorage.setItem(getValeurs3177StorageKey(), JSON.stringify(nextValues));
     setValeurs3177(nextValues);
-    saveCloudState({ valeurs3177: nextValues });
   }
 
   async function transfererChiffre(item) {
@@ -1855,7 +1854,6 @@ export default function App() {
 
     localStorage.setItem(getValeurs3177StorageKey(), JSON.stringify(nextValues));
     setValeurs3177(nextValues);
-    saveCloudState({ valeurs3177: nextValues });
 
     setErreur(
       `Transfert effectué : ${formatArgent(montantATransferer)} ajouté au gain 3177 de "${item.description}". Pour retransférer, il faudra effacer tous les X et remettre les 52 X.`
@@ -2614,6 +2612,7 @@ const rev = {
   function sauvegarderValeurs3177(nextValues) {
     setValeurs3177(nextValues);
     localStorage.setItem(getValeurs3177StorageKey(), JSON.stringify(nextValues));
+    saveCloudState({ valeurs3177: nextValues });
   }
 
   function lireValeur3177(id, champ, defaut = 0) {
@@ -2684,6 +2683,7 @@ const rev = {
 
     setIncrements3177(next);
     localStorage.setItem(getIncrements3177StorageKey(), JSON.stringify(next));
+    saveCloudState({ increments3177: next });
   }
 
   function incrementerGain3177(ligne) {
