@@ -515,6 +515,7 @@ export default function App() {
   const [descriptionEdition, setDescriptionEdition] = useState("");
   const [noteEdition, setNoteEdition] = useState("");
   const [valeurs3177, setValeurs3177] = useState({});
+  const [increments3177, setIncrements3177] = useState({});
   const [input3177Actif, setInput3177Actif] = useState(null);
   const [selectionXRange, setSelectionXRange] = useState(null);
   const [lignesDesactivees, setLignesDesactivees] = useState({});
@@ -1298,6 +1299,10 @@ export default function App() {
     return `budget_3177_valeurs_${getUserId() || "anonymous"}`;
   }
 
+  function getIncrements3177StorageKey() {
+    return `budget_3177_increments_${getUserId() || "anonymous"}`;
+  }
+
   function getLignesDesactiveesStorageKey() {
     return `budget_3185_lignes_desactivees_${getUserId() || "anonymous"}`;
   }
@@ -1329,6 +1334,19 @@ export default function App() {
       setValeurs3177(JSON.parse(localStorage.getItem(getValeurs3177StorageKey()) || "{}"));
     } catch {
       setValeurs3177({});
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user?.id) {
+      setIncrements3177({});
+      return;
+    }
+
+    try {
+      setIncrements3177(JSON.parse(localStorage.getItem(getIncrements3177StorageKey()) || "{}"));
+    } catch {
+      setIncrements3177({});
     }
   }, [session?.user?.id]);
 
@@ -2468,7 +2486,101 @@ const rev = {
     sauvegarderValeurs3177(nextValues);
   }
 
-  function construireTableau3177() {
+  
+  function normaliserTexteIncrement3177(texte) {
+    return String(texte || "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase();
+  }
+
+  function montantIncrement3177Defaut(ligne) {
+    const desc = normaliserTexteIncrement3177(ligne?.description);
+
+    if (desc.includes("HYDRO")) return 81;
+    if (desc.includes("VIDEOTRON")) return 39.23;
+    if (desc.includes("PONT A25") || desc.includes("A25")) return 25;
+    if (desc.includes("CELI")) return 15;
+
+    return 0;
+  }
+
+  function montantIncrement3177(ligne) {
+    const defaut = montantIncrement3177Defaut(ligne);
+    if (!defaut || !ligne?.id) return defaut;
+
+    const valeur = increments3177?.[ligne.id];
+
+    if (valeur === undefined || valeur === null || valeur === "") {
+      return defaut;
+    }
+
+    const nombre = Number(String(valeur).replace(",", "."));
+    return Number.isFinite(nombre) && nombre > 0 ? round2(nombre) : defaut;
+  }
+
+  function sauvegarderIncrement3177(ligne, valeur) {
+    if (!ligne?.id) return;
+
+    const texte = String(valeur || "").replace(",", ".");
+    if (texte !== "" && !/^\d*\.?\d*$/.test(texte)) return;
+
+    const next = {
+      ...increments3177,
+      [ligne.id]: texte,
+    };
+
+    setIncrements3177(next);
+    localStorage.setItem(getIncrements3177StorageKey(), JSON.stringify(next));
+  }
+
+  function incrementerGain3177(ligne) {
+    const montant = montantIncrement3177(ligne);
+    if (!montant) return;
+
+    const actuel = Number(
+      (valeurs3177?.[ligne.id]?.gains ?? ligne.gains ?? 0)
+        .toString()
+        .replace(",", ".")
+    ) || 0;
+
+    const nouveau = (actuel + montant).toFixed(2);
+
+    const nextValues = {
+      ...valeurs3177,
+      [ligne.id]: {
+        ...(valeurs3177[ligne.id] || {}),
+        gains: nouveau,
+      },
+    };
+
+    sauvegarderValeurs3177(nextValues);
+  }
+
+  function decrementerGain3177(ligne) {
+    const montant = montantIncrement3177(ligne);
+    if (!montant) return;
+
+    const actuel = Number(
+      (valeurs3177?.[ligne.id]?.gains ?? ligne.gains ?? 0)
+        .toString()
+        .replace(",", ".")
+    ) || 0;
+
+    const nouveau = Math.max(0, actuel - montant).toFixed(2);
+
+    const nextValues = {
+      ...valeurs3177,
+      [ligne.id]: {
+        ...(valeurs3177[ligne.id] || {}),
+        gains: nouveau,
+      },
+    };
+
+    sauvegarderValeurs3177(nextValues);
+  }
+
+function construireTableau3177() {
     // IMPORTANT :
     // Le 3177 doit afficher exactement les mêmes lignes que le tableau visible du 3185.
     // On filtre donc avec BLOCS_FIXES, puis on garde l'ordre par bloc comme dans groupesFiltres.
@@ -3101,6 +3213,101 @@ const rev = {
                               {ligne.manuel ? (
                                 <>
                                   <button type="button" onClick={() => commencerEditionManuelle3177(ligne)} style={styles.bank3177MiniAction}>✏️</button>
+{montantIncrement3177(ligne) > 0 ? (
+  <span
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      gap: 3,
+      marginLeft: 6,
+      padding: "2px",
+      borderRadius: 9,
+      background: "linear-gradient(180deg, #f8fafc, #e2e8f0)",
+      border: "1px solid rgba(15,23,42,0.18)",
+      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.85), 0 1px 3px rgba(15,23,42,0.12)",
+      verticalAlign: "middle",
+    }}
+  >
+    <input
+      value={increments3177?.[ligne.id] ?? montantIncrement3177Defaut(ligne).toFixed(2)}
+      onChange={(e) => sauvegarderIncrement3177(ligne, e.target.value)}
+      onBlur={(e) => {
+        const valeur = Number(String(e.target.value).replace(",", "."));
+        sauvegarderIncrement3177(
+          ligne,
+          Number.isFinite(valeur) && valeur > 0
+            ? round2(valeur).toFixed(2)
+            : montantIncrement3177Defaut(ligne).toFixed(2)
+        );
+      }}
+      title="Montant ajouté ou retiré à chaque clic"
+      style={{
+        width: 54,
+        height: 24,
+        borderRadius: 7,
+        border: "1px solid rgba(245,158,11,0.70)",
+        background: "linear-gradient(180deg, #fef3c7, #fde68a)",
+        color: "#78350f",
+        fontWeight: 950,
+        fontSize: 12,
+        textAlign: "center",
+        padding: "0 4px",
+        outline: "none",
+      }}
+    />
+
+    <button
+      type="button"
+      onClick={() => decrementerGain3177(ligne)}
+      title={`Retirer ${formatArgent(montantIncrement3177(ligne))}`}
+      style={{
+        width: 24,
+        height: 24,
+        borderRadius: 7,
+        border: "1px solid rgba(239,68,68,0.65)",
+        background: "linear-gradient(180deg, #fee2e2, #fca5a5)",
+        color: "#991b1b",
+        fontWeight: 950,
+        fontSize: 17,
+        cursor: "pointer",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        lineHeight: 1,
+        padding: 0,
+      }}
+    >
+      −
+    </button>
+
+    <button
+      type="button"
+      onClick={() => incrementerGain3177(ligne)}
+      title={`Ajouter ${formatArgent(montantIncrement3177(ligne))}`}
+      style={{
+        width: 24,
+        height: 24,
+        borderRadius: 7,
+        border: "1px solid rgba(34,197,94,0.65)",
+        background: "linear-gradient(180deg, #dcfce7, #86efac)",
+        color: "#065f46",
+        fontWeight: 950,
+        fontSize: 17,
+        cursor: "pointer",
+        display: "inline-flex",
+        alignItems: "center",
+        justifyContent: "center",
+        lineHeight: 1,
+        padding: 0,
+      }}
+    >
+      +
+    </button>
+  </span>
+) : null}
+
+
+
                                   <button type="button" onClick={() => supprimerLigneManuelle3177(ligne)} style={styles.bank3177MiniDelete}>🗑</button>
                                 </>
                               ) : null}
