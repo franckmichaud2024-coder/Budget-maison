@@ -226,42 +226,6 @@ function formatArgent(val) {
   return `${round2(val).toFixed(2)} $`;
 }
 
-function CustomTooltipProMax({ active, payload, label }) {
-  if (!active || !payload || !payload.length) return null;
-
-  const item = payload[0];
-  const rawValue = Number(item?.value || 0);
-  const value = `${round2(rawValue).toLocaleString("fr-CA", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} $`;
-
-  const name = item?.name || item?.payload?.name || label || "";
-  const color = item?.color || item?.fill || item?.stroke || "#38bdf8";
-
-  return (
-    <div
-      style={{
-        minWidth: "170px",
-        background: "linear-gradient(180deg, rgba(2,6,23,0.98) 0%, rgba(15,23,42,0.96) 100%)",
-        border: `1px solid ${color}`,
-        borderRadius: "16px",
-        padding: "12px 14px",
-        color: "#e5f8ff",
-        boxShadow: `0 18px 45px rgba(0,0,0,0.62), 0 0 22px ${color}55`,
-        fontWeight: "900",
-      }}
-    >
-      <div style={{ fontSize: "12px", color: "#cbd5e1", marginBottom: "8px" }}>
-        {String(name)}
-      </div>
-      <div style={{ fontSize: "20px", color }}>
-        {value}
-      </div>
-    </div>
-  );
-}
-
 function formatNombreInput(val) {
   const n = Number(val || 0);
   if (Number.isNaN(n)) return "0.00";
@@ -2962,7 +2926,7 @@ const rev = {
                   <Pie data={graphiqueDepensesParBloc} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={72} outerRadius={125} paddingAngle={4} label={({ name }) => name}>
                     {graphiqueDepensesParBloc.map((_, index) => <Cell key={index} fill={GRAPH_COLORS[index % GRAPH_COLORS.length]} />)}
                   </Pie>
-                  <Tooltip content={<CustomTooltipProMax />} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
+                  <Tooltip formatter={renderMoneyTooltip} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -2978,7 +2942,7 @@ const rev = {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
                 <XAxis dataKey="name" stroke="#cbd5e1" />
                 <YAxis stroke="#cbd5e1" />
-                <Tooltip content={<CustomTooltipProMax />} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
+                <Tooltip formatter={renderMoneyTooltip} />
                 <Bar dataKey="value" radius={[10, 10, 0, 0]}>
                   {graphiqueResume.map((_, index) => <Cell key={index} fill={GRAPH_COLORS[index % GRAPH_COLORS.length]} />)}
                 </Bar>
@@ -2996,7 +2960,7 @@ const rev = {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
                   <XAxis type="number" stroke="#cbd5e1" />
                   <YAxis type="category" dataKey="name" stroke="#cbd5e1" width={150} />
-                  <Tooltip content={<CustomTooltipProMax />} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
+                  <Tooltip formatter={renderMoneyTooltip} />
                   <Bar dataKey="value" fill="#38bdf8" radius={[0, 10, 10, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -3012,7 +2976,7 @@ const rev = {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
                 <XAxis dataKey="name" stroke="#cbd5e1" />
                 <YAxis stroke="#cbd5e1" />
-                <Tooltip content={<CustomTooltipProMax />} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
+                <Tooltip formatter={renderMoneyTooltip} />
                 <Legend />
                 <Line type="monotone" dataKey="value" name="Montant" stroke="#22c55e" strokeWidth={4} dot={{ r: 6 }} />
               </LineChart>
@@ -4337,13 +4301,8 @@ const rev = {
                                       title={`Semaine ${semaine}`}
                                       style={{
                                         ...styles.weekCell,
-                                        background: payee
-                                          ? isDepense
-                                            ? "#ff1b1b"
-                                            : "#0058ff"
-                                          : isEcheance
-                                          ? "#c6e0b4"
-                                          : "#ffffff",
+                                        background: "#ffffff",
+                                        color: "#020617",
                                         outline: "none",
                                       }}
                                     >
@@ -7303,7 +7262,7 @@ const styles = {
     cursor: "pointer",
     userSelect: "none",
     background: "#ffffff",
-    color: "#111827",
+    color: "#020617",
   },
 
   deleteButton: {
