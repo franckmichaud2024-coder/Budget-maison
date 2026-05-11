@@ -925,81 +925,6 @@ export default function App() {
     setSnapshots(lireSnapshots());
   }, [compteActif, session?.user?.id]);
 
-  // Synchronisation automatique multi-PC PRO :
-  // recharge les transactions + les données locales sauvegardées dans Supabase.
-  useEffect(() => {
-    if (!session?.user?.id || !compteActif) return;
-
-    const rafraichirBudget = async () => {
-      await loadData();
-      await loadRevenusResume3185();
-      await loadCloudState();
-    };
-
-    rafraichirBudget();
-
-    const onFocus = () => rafraichirBudget();
-    const onVisibilityChange = () => {
-      if (!document.hidden) rafraichirBudget();
-    };
-
-    window.addEventListener("focus", onFocus);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    const channel = supabase
-      .channel(`budget_sync_${session.user.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "budget_transactions",
-          filter: `user_id=eq.${session.user.id}`,
-        },
-        () => rafraichirBudget()
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "budgets",
-          filter: `user_id=eq.${session.user.id}`,
-        },
-        () => rafraichirBudget()
-      )
-      .subscribe();
-
-    return () => {
-      window.removeEventListener("focus", onFocus);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-      supabase.removeChannel(channel);
-    };
-  }, [session?.user?.id, compteActif]);
-
-  // Sauvegarde cloud automatique des états locaux importants.
-  // Cela force la synchronisation multi-PC même si une modification ne passe pas par une fonction spécifique.
-  useEffect(() => {
-    if (!session?.user?.id) return;
-
-    saveCloudState({
-      banque3185,
-      valeurs3177,
-      increments3177,
-      lignesDesactivees,
-      lignesManuelles3177,
-      descriptionJauneMap,
-    });
-  }, [
-    session?.user?.id,
-    banque3185,
-    valeurs3177,
-    increments3177,
-    lignesDesactivees,
-    lignesManuelles3177,
-    descriptionJauneMap,
-  ]);
-
   useEffect(() => {
     const timer = setInterval(() => setNowLive(new Date()), 60000);
     return () => clearInterval(timer);
@@ -1312,98 +1237,16 @@ export default function App() {
     return session?.user?.id || null;
   }
 
-  async function loadCloudState() {
-    const userId = getUserId();
-    if (!userId) return;
-
-    const { data: cloudRow, error } = await supabase
-      .from("budgets")
-      .select("data")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    if (error || !cloudRow?.data) return;
-
-    const cloud = cloudRow.data || {};
-
-    if (cloud.banque3185 && typeof cloud.banque3185 === "object") {
-      setBanque3185(cloud.banque3185);
-      localStorage.setItem("budget_3185_banque_v1", JSON.stringify(cloud.banque3185));
-    }
-
-    if (cloud.descriptionJauneMap && typeof cloud.descriptionJauneMap === "object") {
-      setDescriptionJauneMap(cloud.descriptionJauneMap);
-      localStorage.setItem("budget_description_jaune_v2", JSON.stringify(cloud.descriptionJauneMap));
-    }
-
-    if (Array.isArray(cloud.lignesManuelles3177)) {
-      setLignesManuelles3177(cloud.lignesManuelles3177);
-      localStorage.setItem("budget_3177_lignes_manuelles_v2", JSON.stringify(cloud.lignesManuelles3177));
-    }
-
-    if (cloud.valeurs3177 && typeof cloud.valeurs3177 === "object") {
-      setValeurs3177(cloud.valeurs3177);
-      localStorage.setItem(getValeurs3177StorageKey(), JSON.stringify(cloud.valeurs3177));
-    }
-
-    if (cloud.increments3177 && typeof cloud.increments3177 === "object") {
-      setIncrements3177(cloud.increments3177);
-      localStorage.setItem(getIncrements3177StorageKey(), JSON.stringify(cloud.increments3177));
-    }
-
-    if (cloud.lignesDesactivees && typeof cloud.lignesDesactivees === "object") {
-      setLignesDesactivees(cloud.lignesDesactivees);
-      localStorage.setItem(getLignesDesactiveesStorageKey(), JSON.stringify(cloud.lignesDesactivees));
-    }
-  }
-
-  async function saveCloudState(partial = {}) {
-    const userId = getUserId();
-    if (!userId) return;
-
-    const { data: existing } = await supabase
-      .from("budgets")
-      .select("id, data")
-      .eq("user_id", userId)
-      .maybeSingle();
-
-    const nextData = {
-      ...(existing?.data || {}),
-      ...partial,
-      updated_at_local: new Date().toISOString(),
-    };
-
-    if (existing?.id) {
-      await supabase
-        .from("budgets")
-        .update({
-          data: nextData,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", existing.id);
-    } else {
-      await supabase
-        .from("budgets")
-        .insert({
-          user_id: userId,
-          data: nextData,
-          updated_at: new Date().toISOString(),
-        });
-    }
-  }
-
   function toggleDescriptionJaune(id) {
     if (!id) return;
     const next = { ...descriptionJauneMap, [id]: !descriptionJauneMap[id] };
     setDescriptionJauneMap(next);
     localStorage.setItem("budget_description_jaune_v2", JSON.stringify(next));
-    saveCloudState({ descriptionJauneMap: next });
   }
 
   function sauvegarderLignesManuelles3177(next) {
     setLignesManuelles3177(next);
     localStorage.setItem("budget_3177_lignes_manuelles_v2", JSON.stringify(next));
-    saveCloudState({ lignesManuelles3177: next });
   }
 
   function ajouterLigneManuelle3177() {
@@ -1479,7 +1322,6 @@ export default function App() {
 
     setLignesDesactivees(nextValues);
     localStorage.setItem(getLignesDesactiveesStorageKey(), JSON.stringify(nextValues));
-    saveCloudState({ lignesDesactivees: nextValues });
   }
 
   useEffect(() => {
@@ -1620,20 +1462,6 @@ export default function App() {
   function estPayee(item, semaine) {
     return semainesPayees(item).includes(semaine);
   }
-  function estProchaineSemaineACocher(item, semaine) {
-    const serie = semainesAfficheesPourLigne(item).map(Number);
-    const payeesSet = new Set(semainesPayees(item).map(Number));
-    const semaineNumber = Number(semaine);
-
-    if (payeesSet.has(semaineNumber)) return false;
-
-    const prochainIndex = serie.findIndex((s) => !payeesSet.has(Number(s)));
-
-    if (prochainIndex === -1) return false;
-
-    return Number(serie[prochainIndex]) === semaineNumber;
-  }
-
 
   function montantAccumuleBrut(item) {
     return semainesPayees(item).length * calculerMontants(item).semaine;
@@ -2327,7 +2155,6 @@ export default function App() {
     const next = { ...banque3185, [champ]: valeur };
     setBanque3185(next);
     localStorage.setItem("budget_3185_banque_v1", JSON.stringify(next));
-    saveCloudState({ banque3185: next });
   }
 
   function lireMontantBanque3185(champ) {
@@ -2635,7 +2462,6 @@ const rev = {
   function sauvegarderValeurs3177(nextValues) {
     setValeurs3177(nextValues);
     localStorage.setItem(getValeurs3177StorageKey(), JSON.stringify(nextValues));
-    saveCloudState({ valeurs3177: nextValues });
   }
 
   function lireValeur3177(id, champ, defaut = 0) {
@@ -2706,7 +2532,6 @@ const rev = {
 
     setIncrements3177(next);
     localStorage.setItem(getIncrements3177StorageKey(), JSON.stringify(next));
-    saveCloudState({ increments3177: next });
   }
 
   function incrementerGain3177(ligne) {
@@ -4932,7 +4757,6 @@ function construireTableau3177() {
                                 {serieSemaines.map((semaine) => {
                                   const payee = estPayee(item, semaine);
                                   const isEcheance = Number(item.echeance) === semaine;
-                                  const isOngletEnveloppes = compteEstEnveloppes(compteActif);
 
                                   return (
                                     <td
@@ -4940,18 +4764,14 @@ function construireTableau3177() {
                                       title={selectionXRange?.id === item.id ? `Clique pour remplir de la semaine ${selectionXRange.semaine} à ${semaine}` : `Semaine ${semaine}`}
                                       style={{
                                         ...styles.weekTopCell,
-                                        background: isOngletEnveloppes
-                                          ? payee
-                                            ? "#ff1b1b"
-                                            : "#ffffff"
-                                          : payee
+                                        background: payee
                                           ? isDepense
                                             ? "#ff1b1b"
                                             : "#0058ff"
                                           : isEcheance
                                           ? "#c6e0b4"
                                           : "#ffffff",
-                                        color: "#020617",
+                                        color: payee ? "#000" : "#000",
                                         outline: "none",
                                       }}
                                     >
@@ -4979,8 +4799,6 @@ function construireTableau3177() {
                                 {serieSemaines.map((semaine) => {
                                   const payee = estPayee(item, semaine);
                                   const isEcheance = Number(item.echeance) === semaine;
-                                  const prochaine = estProchaineSemaineACocher(item, semaine);
-                                  const isOngletEnveloppes = compteEstEnveloppes(compteActif);
 
                                   return (
                                     <td
@@ -4989,20 +4807,13 @@ function construireTableau3177() {
                                       title={`Semaine ${semaine}`}
                                       style={{
                                         ...styles.weekCell,
-                                        background: isOngletEnveloppes
-                                          ? payee
-                                            ? "#ffffff"
-                                            : prochaine
-                                            ? "#ffff00"
-                                            : "#ffffff"
-                                          : payee
+                                        background: payee
                                           ? isDepense
                                             ? "#ff1b1b"
                                             : "#0058ff"
                                           : isEcheance
                                           ? "#c6e0b4"
                                           : "#ffffff",
-                                        color: isOngletEnveloppes ? "#020617" : "#020617",
                                         outline: "none",
                                       }}
                                     >
@@ -8053,7 +7864,7 @@ const styles = {
     padding: 0,
     userSelect: "none",
     background: "#ffffff",
-    color: "#020617",
+    color: "#111827",
   },
 
   weekCell: {
@@ -8070,7 +7881,7 @@ const styles = {
     cursor: "pointer",
     userSelect: "none",
     background: "#ffffff",
-    color: "#020617",
+    color: "#111827",
   },
 
   deleteButton: {
