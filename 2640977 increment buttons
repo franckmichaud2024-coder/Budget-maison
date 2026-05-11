@@ -1,0 +1,99 @@
+[33md1c7663[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m sync cloud propre
+[33mc6163ea[m sync complete valeurs3177
+[33m4cfba81[m cloud sync active
+[33m1a69872[m sync final fixed
+[33m57437ab[m sync cloud final
+[33m674704a[m fix synchronisation multi pc
+[33mea4e1d7[m mise a jour App.jsx
+[33m9ba51e7[m restore old App.jsx
+[33maba0ea8[m correction semaines blanches
+[33m053cced[m restore old App.jsx
+[33m9554216[m correction semaines blanches
+[33mee39c4b[m stable version
+[33m1762444[m stable version
+[33m2319c0d[m mise a jour
+[33mb3e283f[m mise a jour
+[33m2640977[m increment buttons
+[33m4bf6260[m increment buttons
+[33m6265c19[m increment buttons
+[33m55f77a5[m increment buttons
+[33m28c4d35[m update entree argent ultra pro max
+[33m33970ca[m update entree argent ultra pro max
+[33mff61c05[m Version tooltip pro max
+[33mf93a872[m update entree argent ultra pro max
+[33m275b6d5[m update entree argent ultra pro max
+[33m4c2ba9a[m update entree argent ultra pro max
+[33m3d2b5c0[m update entree argent ultra pro max
+[33m4d57955[m update entree argent ultra pro max
+[33m0c71edf[m update entree argent ultra pro max
+[33ma599620[m update entree argent ultra pro max
+[33m355b942[m update entree argent ultra pro max
+[33m6e98258[m update entree argent ultra pro max
+[33m0a70247[m update entree argent ultra pro max
+[33mdb1d3a9[m update entree argent ultra pro max
+[33mae606ca[m update entree argent ultra pro max
+[33m8957487[m update entree argent ultra pro max
+[33m445fe94[m update entree argent ultra pro max
+[33m5d4583a[m update entree argent ultra pro max
+[33m12080fb[m update entree argent ultra pro max
+[33mce9a7f2[m update entree argent ultra pro max
+[33m8353d33[m update entree argent ultra pro max
+[33m90c95d0[m update entree argent ultra pro max
+[33m9ad8310[m update entree argent ultra pro max
+[33m9f31360[m update entree argent ultra pro max
+[33m41d0ee8[m update entree argent ultra pro max
+[33m1691eb6[m update entree argent ultra pro max
+[33m6c0dfb4[m update entree argent ultra pro max
+[33mbe8460d[m update entree argent ultra pro max
+[33m7a69f7d[m update entree argent ultra pro max
+[33m41d3598[m update entree argent ultra pro max
+[33m4f86ef9[m update entree argent ultra pro max
+[33m4f992da[m update entree argent ultra pro max
+[33m74f9c33[m update entree argent ultra pro max
+[33m8cbfb24[m update entree argent ultra pro max
+[33me44a097[m Update entrée argent PRO MAX
+[33me9428cb[m Update entrée argent PRO MAX
+[33m429a087[m fix entree argent
+[33m81edc3a[m clean UI final
+[33mda2b125[m fix final css
+[33m6b62718[m fix css tailwind
+[33m5a5b930[m install framer motion
+[33m2aa0591[m ultra stable fix
+[33mc22f0bf[m Fix entree argent editable
+[33m0733341[m Fix visuel entree argent
+[33m8fc5518[m Fix visuel entree argent
+[33m542c8b3[m Visuel entree argent style banque
+[33m695bcba[m Fix build entree argent
+[33m07cc4cd[m Fix onglet entree argent tableau
+[33m8f7529e[m Fix onglet entree argent tableau
+[33m34f777f[m Fix onglet entrée argent
+[33mbc6b981[m Fix onglet entrée argent
+[33m481d5dd[m Ajout onglet entrée d'argent PRO
+[33m1da6957[m Fix boucle semaines
+[33m7228cc8[m Fix popup entree argent
+[33mb54fd8a[m Ajout entree argent popup
+[33m8026e17[m Fix 5 semaines mode semaine
+[33m753f574[m Fix syntax password button
+[33m3bf3a45[m Ajout changement password
+[33m901473b[m Restore dashboard PRO MAX
+[33md4a5d51[m Restore dashboard PRO MAX
+[33m2c6e45d[m Filtrer les données par utilisateur
+[33m6618cd7[m Restore dashboard PRO MAX
+[33m9647780[m Restore dashboard PRO MAX
+[33m59fcc7d[m SECURITE LOGIN FINAL
+[33m87b1292[m Fix Supabase anon key
+[33ma031dd5[m FIX build + sécurité login
+[33m8b23e66[m SECURITE: session OFF
+[33maa295e7[m Forcer reconnexion au démarrage
+[33m6d9cfa7[m Correction login Supabase
+[33m2e0f162[m fix mode hybride
+[33mcb2ced8[m login pro max
+[33m3474e6a[m fix supabase publishable key
+[33m46230e6[m upgrade securite session
+[33ma54bc38[m secure login with session storage
+[33m6c86d16[m disable session persistence
+[33me03ebbd[m upgrade trading ui
+[33m30f3ed0[m update
+[33m80b5806[m fix login obligatoire
+[33mb873d46[m update app trading
+[33me9a0cc3[m deploy
