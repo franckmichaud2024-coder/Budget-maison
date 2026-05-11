@@ -925,6 +925,14 @@ export default function App() {
     setSnapshots(lireSnapshots());
   }, [compteActif, session?.user?.id]);
 
+  // Synchronisation automatique multi-PC :
+  // recharge les données Supabase dès que la session ou le compte actif change.
+  useEffect(() => {
+    if (session && compteActif) {
+      loadData();
+    }
+  }, [session, compteActif]);
+
   useEffect(() => {
     const timer = setInterval(() => setNowLive(new Date()), 60000);
     return () => clearInterval(timer);
