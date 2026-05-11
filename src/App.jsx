@@ -11,7 +11,7 @@ const COMPTES_BUDGET = [
   "7570 - Procédures",
 ];
 
-const GRAPH_COLORS = ["#38bdf8", "#22c55e", "#f97316", "#eab308", "#a855f7", "#ffffff", "#14b8a6", "#64748b", "#ec4899", "#06b6d4"];
+const GRAPH_COLORS = ["#38bdf8", "#22c55e", "#f97316", "#eab308", "#a855f7", "#ef4444", "#14b8a6", "#64748b", "#ec4899", "#06b6d4"];
 
 
 
@@ -215,7 +215,7 @@ const colonnesFixes = [
 ];
 
 function leftOffset(index) {
-  return colonnesFixes.slice(0, index).#ffffffuce((acc, col) => acc + col.width, 0);
+  return colonnesFixes.slice(0, index).reduce((acc, col) => acc + col.width, 0);
 }
 
 function round2(val) {
@@ -224,6 +224,42 @@ function round2(val) {
 
 function formatArgent(val) {
   return `${round2(val).toFixed(2)} $`;
+}
+
+function CustomTooltipProMax({ active, payload, label }) {
+  if (!active || !payload || !payload.length) return null;
+
+  const item = payload[0];
+  const rawValue = Number(item?.value || 0);
+  const value = `${round2(rawValue).toLocaleString("fr-CA", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} $`;
+
+  const name = item?.name || item?.payload?.name || label || "";
+  const color = item?.color || item?.fill || item?.stroke || "#38bdf8";
+
+  return (
+    <div
+      style={{
+        minWidth: "170px",
+        background: "linear-gradient(180deg, rgba(2,6,23,0.98) 0%, rgba(15,23,42,0.96) 100%)",
+        border: `1px solid ${color}`,
+        borderRadius: "16px",
+        padding: "12px 14px",
+        color: "#e5f8ff",
+        boxShadow: `0 18px 45px rgba(0,0,0,0.62), 0 0 22px ${color}55`,
+        fontWeight: "900",
+      }}
+    >
+      <div style={{ fontSize: "12px", color: "#cbd5e1", marginBottom: "8px" }}>
+        {String(name)}
+      </div>
+      <div style={{ fontSize: "20px", color }}>
+        {value}
+      </div>
+    </div>
+  );
 }
 
 function formatNombreInput(val) {
@@ -1852,12 +1888,12 @@ export default function App() {
   const depenses = data.filter((item) => item.type === "depense");
   const revenus = data.filter((item) => item.type === "revenu");
 
-  const totalDepenses = depenses.#ffffffuce(
+  const totalDepenses = depenses.reduce(
     (acc, item) => acc + calculerMontants(item).mois,
     0
   );
 
-  const totalRevenus = revenus.#ffffffuce(
+  const totalRevenus = revenus.reduce(
     (acc, item) => acc + calculerMontants(item).mois,
     0
   );
@@ -1899,8 +1935,8 @@ export default function App() {
   }, [lignesGraphiques]);
 
   const graphiqueResume = useMemo(() => {
-    const totalRev = revenusGraphiques.#ffffffuce((acc, item) => acc + calculerMontants(item).mois, 0);
-    const totalDep = lignesGraphiques.#ffffffuce((acc, item) => acc + calculerMontants(item).mois, 0);
+    const totalRev = revenusGraphiques.reduce((acc, item) => acc + calculerMontants(item).mois, 0);
+    const totalDep = lignesGraphiques.reduce((acc, item) => acc + calculerMontants(item).mois, 0);
     return [
       { name: "Revenus", value: round2(totalRev) },
       { name: "Dépenses", value: round2(totalDep) },
@@ -1909,8 +1945,8 @@ export default function App() {
   }, [revenusGraphiques, lignesGraphiques]);
 
   const graphiqueAccumulation = useMemo(() => {
-    const totalCible = lignesGraphiques.#ffffffuce((acc, item) => acc + calculerMontants(item).annee, 0);
-    const totalAccumule = lignesGraphiques.#ffffffuce((acc, item) => acc + montantAccumule(item), 0);
+    const totalCible = lignesGraphiques.reduce((acc, item) => acc + calculerMontants(item).annee, 0);
+    const totalAccumule = lignesGraphiques.reduce((acc, item) => acc + montantAccumule(item), 0);
     return [
       { name: "Objectif annuel", value: round2(totalCible) },
       { name: "Accumuler", value: round2(totalAccumule) },
@@ -1963,7 +1999,7 @@ export default function App() {
   }
 
   function totauxListeTransactions(liste = []) {
-    return liste.#ffffffuce(
+    return liste.reduce(
       (acc, item) => {
         const c = calculerMontants(item);
         acc.semaine += c.semaine;
@@ -2030,7 +2066,7 @@ const rev = {
     // B = montant réel écrit manuellement
     // C = A - B
     const montantQueJeDevraisAvoir = round2(
-      lignesDepenses.#ffffffuce((acc, item) => acc + montantAccumule(item), 0)
+      lignesDepenses.reduce((acc, item) => acc + montantAccumule(item), 0)
     );
     const montantQueJaiDansCompte = lireMontantBanque3185("montantCompte3185");
     const argentAVerserCompte = round2(montantQueJeDevraisAvoir - montantQueJaiDansCompte);
@@ -2130,7 +2166,7 @@ const rev = {
               </div>
               {valeurBox(argentAVerserCompte, {
                 ...styles.bankCleanGreenValue,
-                color: valeurPositive ? "#047857" : "#ffffff",
+                color: valeurPositive ? "#047857" : "#dc2626",
                 background: valeurPositive
                   ? "linear-gradient(180deg, #f0fdf4 0%, #dcfce7 100%)"
                   : "linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%)",
@@ -2298,7 +2334,7 @@ const rev = {
         round2(lireValeur3177(id, `depense${i + 1}`, 0))
       );
 
-      const totalDepenses = round2(depenses.#ffffffuce((acc, val) => acc + Number(val || 0), 0));
+      const totalDepenses = round2(depenses.reduce((acc, val) => acc + Number(val || 0), 0));
       const solde = round2(gains - totalDepenses);
 
       return {
@@ -2404,9 +2440,9 @@ const rev = {
       };
     };
 
-    const totalSemaine = lignesAffichage.#ffffffuce((acc, item) => acc + calculRevenu(item).semaine, 0);
-    const totalMois = lignesAffichage.#ffffffuce((acc, item) => acc + calculRevenu(item).mois, 0);
-    const totalAnnee = lignesAffichage.#ffffffuce((acc, item) => acc + calculRevenu(item).annee, 0);
+    const totalSemaine = lignesAffichage.reduce((acc, item) => acc + calculRevenu(item).semaine, 0);
+    const totalMois = lignesAffichage.reduce((acc, item) => acc + calculRevenu(item).mois, 0);
+    const totalAnnee = lignesAffichage.reduce((acc, item) => acc + calculRevenu(item).annee, 0);
 
     async function sauvegarderRevenu(id, champs) {
       if (!id) return;
@@ -2769,8 +2805,8 @@ const rev = {
 
   function renduTableau3177() {
     const lignes3177 = construireTableau3177();
-    const totalGains = lignes3177.#ffffffuce((acc, item) => acc + Number(item.gains || 0), 0);
-    const totalSolde = lignes3177.#ffffffuce((acc, item) => acc + Number(item.solde || 0), 0);
+    const totalGains = lignes3177.reduce((acc, item) => acc + Number(item.gains || 0), 0);
+    const totalSolde = lignes3177.reduce((acc, item) => acc + Number(item.solde || 0), 0);
 
     return (
       <div key={compteActif} style={styles.pageSwitchAnimation}>
@@ -2913,7 +2949,7 @@ const rev = {
           <div style={styles.graphHeroStats}>
             <div style={styles.graphMiniStat}><span>Dépenses / mois</span><strong>{formatArgent(totalDep)}</strong></div>
             <div style={styles.graphMiniStat}><span>Revenus / mois</span><strong>{formatArgent(totalRev)}</strong></div>
-            <div style={{ ...styles.graphMiniStat, borderColor: beneficeGraph >= 0 ? "rgba(34,197,94,0.45)" : "rgba(239,68,68,0.45)" }}><span>Bénéfices</span><strong style={{ color: beneficeGraph >= 0 ? "#86efac" : "#ffffff" }}>{formatArgent(beneficeGraph)}</strong></div>
+            <div style={{ ...styles.graphMiniStat, borderColor: beneficeGraph >= 0 ? "rgba(34,197,94,0.45)" : "rgba(239,68,68,0.45)" }}><span>Bénéfices</span><strong style={{ color: beneficeGraph >= 0 ? "#86efac" : "#fca5a5" }}>{formatArgent(beneficeGraph)}</strong></div>
           </div>
         </div>
 
@@ -2926,7 +2962,7 @@ const rev = {
                   <Pie data={graphiqueDepensesParBloc} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={72} outerRadius={125} paddingAngle={4} label={({ name }) => name}>
                     {graphiqueDepensesParBloc.map((_, index) => <Cell key={index} fill={GRAPH_COLORS[index % GRAPH_COLORS.length]} />)}
                   </Pie>
-                  <Tooltip formatter={renderMoneyTooltip} />
+                  <Tooltip content={<CustomTooltipProMax />} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
@@ -2942,7 +2978,7 @@ const rev = {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
                 <XAxis dataKey="name" stroke="#cbd5e1" />
                 <YAxis stroke="#cbd5e1" />
-                <Tooltip formatter={renderMoneyTooltip} />
+                <Tooltip content={<CustomTooltipProMax />} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
                 <Bar dataKey="value" radius={[10, 10, 0, 0]}>
                   {graphiqueResume.map((_, index) => <Cell key={index} fill={GRAPH_COLORS[index % GRAPH_COLORS.length]} />)}
                 </Bar>
@@ -2960,7 +2996,7 @@ const rev = {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
                   <XAxis type="number" stroke="#cbd5e1" />
                   <YAxis type="category" dataKey="name" stroke="#cbd5e1" width={150} />
-                  <Tooltip formatter={renderMoneyTooltip} />
+                  <Tooltip content={<CustomTooltipProMax />} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
                   <Bar dataKey="value" fill="#38bdf8" radius={[0, 10, 10, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -2976,7 +3012,7 @@ const rev = {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
                 <XAxis dataKey="name" stroke="#cbd5e1" />
                 <YAxis stroke="#cbd5e1" />
-                <Tooltip formatter={renderMoneyTooltip} />
+                <Tooltip content={<CustomTooltipProMax />} cursor={{ fill: "rgba(56,189,248,0.08)" }} />
                 <Legend />
                 <Line type="monotone" dataKey="value" name="Montant" stroke="#22c55e" strokeWidth={4} dot={{ r: 6 }} />
               </LineChart>
@@ -3024,25 +3060,6 @@ const rev = {
           body {
             overflow-x: hidden;
             overflow-y: auto;
-          }
-
-
-          /* OVERRIDE FINAL : calendrier 1 à 52 sans rouge */
-          .calendar-cell,
-          .week-cell,
-          .paid-week-cell,
-          .x-week-cell,
-          .paid-cell {
-            background: #ffffff !important;
-            color: #020617 !important;
-          }
-
-          .calendar-cell *,
-          .week-cell *,
-          .paid-week-cell *,
-          .x-week-cell *,
-          .paid-cell * {
-            color: #020617 !important;
           }
 
           @keyframes graphViewEnter {
@@ -3969,19 +3986,19 @@ const rev = {
                 </tr>
               ) : (
                 Object.entries(groupesFiltres).map(([nomBloc, lignes]) => {
-                  const totalSemaine = lignes.#ffffffuce(
+                  const totalSemaine = lignes.reduce(
                     (acc, item) => acc + calculerMontants(item).semaine,
                     0
                   );
-                  const totalMois = lignes.#ffffffuce(
+                  const totalMois = lignes.reduce(
                     (acc, item) => acc + calculerMontants(item).mois,
                     0
                   );
-                  const totalAnnee = lignes.#ffffffuce(
+                  const totalAnnee = lignes.reduce(
                     (acc, item) => acc + calculerMontants(item).annee,
                     0
                   );
-                  const totalAccumuleBloc = lignes.#ffffffuce(
+                  const totalAccumuleBloc = lignes.reduce(
                     (acc, item) => acc + montantAccumule(item),
                     0
                   );
@@ -4284,7 +4301,7 @@ const rev = {
                                           : isEcheance
                                           ? "#c6e0b4"
                                           : "#ffffff",
-                                        color: payee ? "#020617" : "#020617",
+                                        color: payee ? "#000" : "#000",
                                         outline: "none",
                                       }}
                                     >
@@ -4315,8 +4332,7 @@ const rev = {
 
                                   return (
                                     <td
-                                      className="week-cell"
-                key={`x-${item.id}-${semaine}`}
+                                      key={`x-${item.id}-${semaine}`}
                                       onClick={() => toggleSemaine(item, semaine)}
                                       title={`Semaine ${semaine}`}
                                       style={{
@@ -5598,14 +5614,14 @@ const styles = {
 
   loginError: {
     marginTop: "12px",
-    color: "#ffffff",
+    color: "#fca5a5",
     fontWeight: "900",
     fontSize: "13px",
   },
 
   logoutButton: {
     padding: "10px 15px",
-    background: "linear-gradient(180deg, #ffffff 0%, #450a0a 100%)",
+    background: "linear-gradient(180deg, #7f1d1d 0%, #450a0a 100%)",
     color: "white",
     border: "1px solid rgba(248,113,113,0.48)",
     borderRadius: "8px",
@@ -5898,7 +5914,7 @@ const styles = {
     padding: "5px 12px",
     borderRadius: "10px",
     border: "1px solid rgba(248,113,113,0.45)",
-    background: "linear-gradient(180deg, #ffffff 0%, #ffffff 100%)",
+    background: "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)",
     color: "#ffffff",
     fontWeight: "950",
     cursor: "pointer",
@@ -6043,7 +6059,7 @@ const styles = {
     borderRadius: "8px",
     background: "rgba(239, 68, 68, 0.10)",
     border: "1px solid rgba(239, 68, 68, 0.25)",
-    color: "#ffffff",
+    color: "#fecaca",
     fontSize: "13px",
     fontWeight: "800",
     lineHeight: 1.45,
@@ -6096,7 +6112,7 @@ const styles = {
     padding: "10px 15px",
     borderRadius: "11px",
     border: "1px solid rgba(248,113,113,0.45)",
-    background: "linear-gradient(180deg, #ffffff, #ffffff)",
+    background: "linear-gradient(180deg, #ef4444, #991b1b)",
     color: "#ffffff",
     fontWeight: "900",
     cursor: "pointer",
@@ -6207,7 +6223,7 @@ const styles = {
 
   resetButton: {
     padding: "10px 15px",
-    background: "linear-gradient(180deg, #f97316 0%, #ffffff 100%)",
+    background: "linear-gradient(180deg, #f97316 0%, #991b1b 100%)",
     color: "#ffffff",
     border: "1px solid rgba(251, 146, 60, 0.50)",
     borderRadius: "8px",
@@ -6555,7 +6571,7 @@ const styles = {
     width: "38px",
     borderRadius: "10px",
     border: "1px solid rgba(239,68,68,0.50)",
-    background: "linear-gradient(180deg, #ffffff, #ffffff)",
+    background: "linear-gradient(180deg, #ef4444, #7f1d1d)",
     color: "#ffffff",
     fontWeight: "950",
     cursor: "pointer",
@@ -6657,8 +6673,8 @@ const styles = {
     padding: "0 12px",
     borderRadius: "10px",
     border: "1px solid rgba(248,113,113,0.34)",
-    background: "linear-gradient(180deg, #ffffff 0%, #450a0a 100%)",
-    color: "#ffffff",
+    background: "linear-gradient(180deg, #991b1b 0%, #450a0a 100%)",
+    color: "#fee2e2",
     fontWeight: "900",
     fontSize: "12px",
     cursor: "pointer",
@@ -6670,7 +6686,7 @@ const styles = {
     width: "36px",
     borderRadius: "10px",
     border: "1px solid rgba(248,113,113,0.34)",
-    background: "linear-gradient(180deg, #ffffff 0%, #ffffff 100%)",
+    background: "linear-gradient(180deg, #ef4444 0%, #7f1d1d 100%)",
     color: "#ffffff",
     fontWeight: "900",
     cursor: "pointer",
@@ -6706,7 +6722,7 @@ const styles = {
     minWidth: "52px",
     borderRadius: "10px",
     border: "1px solid rgba(248,113,113,0.38)",
-    background: "linear-gradient(180deg, #ffffff 0%, #ffffff 100%)",
+    background: "linear-gradient(180deg, #ef4444 0%, #991b1b 100%)",
     color: "#ffffff",
     fontWeight: "950",
     fontSize: "12px",
@@ -7225,7 +7241,7 @@ const styles = {
   },
 
   toggleCompteButtonOff: {
-    background: "linear-gradient(135deg, #ffffff, #ffffff)",
+    background: "linear-gradient(135deg, #ef4444, #b91c1c)",
   },
 
   accumuleCell: {
@@ -7237,12 +7253,12 @@ const styles = {
 
   accumuleCellDisabled: {
     background: "#fff1f2",
-    color: "#ffffff",
+    color: "#dc2626",
     border: "1px solid rgba(248,113,113,0.75)",
     fontWeight: "900",
   },
 
-  #ffffffText: {
+  redText: {
     color: "#0f172a",
     fontWeight: "650",
   },
@@ -7291,7 +7307,7 @@ const styles = {
   },
 
   deleteButton: {
-    background: "linear-gradient(180deg, #ff3b3b 0%, #ffffff 100%)",
+    background: "linear-gradient(180deg, #ff3b3b 0%, #b91c1c 100%)",
     color: "#ffffff",
     border: "1px solid rgba(255,255,255,0.28)",
     borderRadius: "10px",
@@ -8129,7 +8145,7 @@ const styles = {
     height: "34px",
     borderRadius: "9px",
     border: "1px solid rgba(255,255,255,0.25)",
-    background: "linear-gradient(180deg, #ffffff 0%, #ffffff 100%)",
+    background: "linear-gradient(180deg, #ef4444 0%, #b91c1c 100%)",
     color: "#ffffff",
     fontWeight: "950",
     cursor: "pointer",
