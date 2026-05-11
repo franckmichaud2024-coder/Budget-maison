@@ -977,6 +977,29 @@ export default function App() {
     };
   }, [session?.user?.id, compteActif]);
 
+  // Sauvegarde cloud automatique des états locaux importants.
+  // Cela force la synchronisation multi-PC même si une modification ne passe pas par une fonction spécifique.
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    saveCloudState({
+      banque3185,
+      valeurs3177,
+      increments3177,
+      lignesDesactivees,
+      lignesManuelles3177,
+      descriptionJauneMap,
+    });
+  }, [
+    session?.user?.id,
+    banque3185,
+    valeurs3177,
+    increments3177,
+    lignesDesactivees,
+    lignesManuelles3177,
+    descriptionJauneMap,
+  ]);
+
   useEffect(() => {
     const timer = setInterval(() => setNowLive(new Date()), 60000);
     return () => clearInterval(timer);
