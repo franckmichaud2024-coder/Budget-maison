@@ -925,6 +925,81 @@ export default function App() {
     setSnapshots(lireSnapshots());
   }, [compteActif, session?.user?.id]);
 
+  // Synchronisation automatique multi-PC PRO :
+  // recharge les transactions + les données locales sauvegardées dans Supabase.
+  useEffect(() => {
+    if (!session?.user?.id || !compteActif) return;
+
+    const rafraichirBudget = async () => {
+      await loadData();
+      await loadRevenusResume3185();
+      await loadCloudState();
+    };
+
+    rafraichirBudget();
+
+    const onFocus = () => rafraichirBudget();
+    const onVisibilityChange = () => {
+      if (!document.hidden) rafraichirBudget();
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    const channel = supabase
+      .channel(`budget_sync_${session.user.id}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "budget_transactions",
+          filter: `user_id=eq.${session.user.id}`,
+        },
+        () => rafraichirBudget()
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "budgets",
+          filter: `user_id=eq.${session.user.id}`,
+        },
+        () => rafraichirBudget()
+      )
+      .subscribe();
+
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      supabase.removeChannel(channel);
+    };
+  }, [session?.user?.id, compteActif]);
+
+  // Sauvegarde cloud automatique des états locaux importants.
+  // Cela force la synchronisation multi-PC même si une modification ne passe pas par une fonction spécifique.
+  useEffect(() => {
+    if (!session?.user?.id) return;
+
+    saveCloudState({
+      banque3185,
+      valeurs3177,
+      increments3177,
+      lignesDesactivees,
+      lignesManuelles3177,
+      descriptionJauneMap,
+    });
+  }, [
+    session?.user?.id,
+    banque3185,
+    valeurs3177,
+    increments3177,
+    lignesDesactivees,
+    lignesManuelles3177,
+    descriptionJauneMap,
+  ]);
+
   useEffect(() => {
     const timer = setInterval(() => setNowLive(new Date()), 60000);
     return () => clearInterval(timer);
@@ -1237,16 +1312,98 @@ export default function App() {
     return session?.user?.id || null;
   }
 
+  async function loadCloudState() {
+    const userId = getUserId();
+    if (!userId) return;
+
+    const { data: cloudRow, error } = await supabase
+      .from("budgets")
+      .select("data")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (error || !cloudRow?.data) return;
+
+    const cloud = cloudRow.data || {};
+
+    if (cloud.banque3185 && typeof cloud.banque3185 === "object") {
+      setBanque3185(cloud.banque3185);
+      localStorage.setItem("budget_3185_banque_v1", JSON.stringify(cloud.banque3185));
+    }
+
+    if (cloud.descriptionJauneMap && typeof cloud.descriptionJauneMap === "object") {
+      setDescriptionJauneMap(cloud.descriptionJauneMap);
+      localStorage.setItem("budget_description_jaune_v2", JSON.stringify(cloud.descriptionJauneMap));
+    }
+
+    if (Array.isArray(cloud.lignesManuelles3177)) {
+      setLignesManuelles3177(cloud.lignesManuelles3177);
+      localStorage.setItem("budget_3177_lignes_manuelles_v2", JSON.stringify(cloud.lignesManuelles3177));
+    }
+
+    if (cloud.valeurs3177 && typeof cloud.valeurs3177 === "object") {
+      setValeurs3177(cloud.valeurs3177);
+      localStorage.setItem(getValeurs3177StorageKey(), JSON.stringify(cloud.valeurs3177));
+    }
+
+    if (cloud.increments3177 && typeof cloud.increments3177 === "object") {
+      setIncrements3177(cloud.increments3177);
+      localStorage.setItem(getIncrements3177StorageKey(), JSON.stringify(cloud.increments3177));
+    }
+
+    if (cloud.lignesDesactivees && typeof cloud.lignesDesactivees === "object") {
+      setLignesDesactivees(cloud.lignesDesactivees);
+      localStorage.setItem(getLignesDesactiveesStorageKey(), JSON.stringify(cloud.lignesDesactivees));
+    }
+  }
+
+  async function saveCloudState(partial = {}) {
+    const userId = getUserId();
+    if (!userId) return;
+
+    const { data: existing } = await supabase
+      .from("budgets")
+      .select("id, data")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const nextData = {
+      ...(existing?.data || {}),
+      ...partial,
+      updated_at_local: new Date().toISOString(),
+    };
+
+    if (existing?.id) {
+      await supabase
+        .from("budgets")
+        .update({
+          data: nextData,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existing.id);
+    } else {
+      await supabase
+        .from("budgets")
+        .insert({
+          user_id: userId,
+          data: nextData,
+          updated_at: new Date().toISOString(),
+        });
+    }
+  }
+
   function toggleDescriptionJaune(id) {
     if (!id) return;
     const next = { ...descriptionJauneMap, [id]: !descriptionJauneMap[id] };
     setDescriptionJauneMap(next);
     localStorage.setItem("budget_description_jaune_v2", JSON.stringify(next));
+    saveCloudState({ descriptionJauneMap: next });
   }
 
   function sauvegarderLignesManuelles3177(next) {
     setLignesManuelles3177(next);
     localStorage.setItem("budget_3177_lignes_manuelles_v2", JSON.stringify(next));
+    saveCloudState({ lignesManuelles3177: next });
   }
 
   function ajouterLigneManuelle3177() {
@@ -1322,6 +1479,7 @@ export default function App() {
 
     setLignesDesactivees(nextValues);
     localStorage.setItem(getLignesDesactiveesStorageKey(), JSON.stringify(nextValues));
+    saveCloudState({ lignesDesactivees: nextValues });
   }
 
   useEffect(() => {
@@ -1462,6 +1620,20 @@ export default function App() {
   function estPayee(item, semaine) {
     return semainesPayees(item).includes(semaine);
   }
+  function estProchaineSemaineACocher(item, semaine) {
+    const serie = semainesAfficheesPourLigne(item).map(Number);
+    const payeesSet = new Set(semainesPayees(item).map(Number));
+    const semaineNumber = Number(semaine);
+
+    if (payeesSet.has(semaineNumber)) return false;
+
+    const prochainIndex = serie.findIndex((s) => !payeesSet.has(Number(s)));
+
+    if (prochainIndex === -1) return false;
+
+    return Number(serie[prochainIndex]) === semaineNumber;
+  }
+
 
   function montantAccumuleBrut(item) {
     return semainesPayees(item).length * calculerMontants(item).semaine;
@@ -2155,6 +2327,7 @@ export default function App() {
     const next = { ...banque3185, [champ]: valeur };
     setBanque3185(next);
     localStorage.setItem("budget_3185_banque_v1", JSON.stringify(next));
+    saveCloudState({ banque3185: next });
   }
 
   function lireMontantBanque3185(champ) {
@@ -2462,6 +2635,7 @@ const rev = {
   function sauvegarderValeurs3177(nextValues) {
     setValeurs3177(nextValues);
     localStorage.setItem(getValeurs3177StorageKey(), JSON.stringify(nextValues));
+    saveCloudState({ valeurs3177: nextValues });
   }
 
   function lireValeur3177(id, champ, defaut = 0) {
@@ -2532,6 +2706,7 @@ const rev = {
 
     setIncrements3177(next);
     localStorage.setItem(getIncrements3177StorageKey(), JSON.stringify(next));
+    saveCloudState({ increments3177: next });
   }
 
   function incrementerGain3177(ligne) {
@@ -4757,6 +4932,7 @@ function construireTableau3177() {
                                 {serieSemaines.map((semaine) => {
                                   const payee = estPayee(item, semaine);
                                   const isEcheance = Number(item.echeance) === semaine;
+                                  const isOngletEnveloppes = compteEstEnveloppes(compteActif);
 
                                   return (
                                     <td
@@ -4764,14 +4940,18 @@ function construireTableau3177() {
                                       title={selectionXRange?.id === item.id ? `Clique pour remplir de la semaine ${selectionXRange.semaine} à ${semaine}` : `Semaine ${semaine}`}
                                       style={{
                                         ...styles.weekTopCell,
-                                        background: payee
+                                        background: isOngletEnveloppes
+                                          ? payee
+                                            ? "#ff1b1b"
+                                            : "#ffffff"
+                                          : payee
                                           ? isDepense
                                             ? "#ff1b1b"
                                             : "#0058ff"
                                           : isEcheance
                                           ? "#c6e0b4"
                                           : "#ffffff",
-                                        color: payee ? "#000" : "#000",
+                                        color: "#020617",
                                         outline: "none",
                                       }}
                                     >
@@ -4799,6 +4979,8 @@ function construireTableau3177() {
                                 {serieSemaines.map((semaine) => {
                                   const payee = estPayee(item, semaine);
                                   const isEcheance = Number(item.echeance) === semaine;
+                                  const prochaine = estProchaineSemaineACocher(item, semaine);
+                                  const isOngletEnveloppes = compteEstEnveloppes(compteActif);
 
                                   return (
                                     <td
@@ -4807,13 +4989,20 @@ function construireTableau3177() {
                                       title={`Semaine ${semaine}`}
                                       style={{
                                         ...styles.weekCell,
-                                        background: payee
+                                        background: isOngletEnveloppes
+                                          ? payee
+                                            ? "#ffffff"
+                                            : prochaine
+                                            ? "#ffff00"
+                                            : "#ffffff"
+                                          : payee
                                           ? isDepense
                                             ? "#ff1b1b"
                                             : "#0058ff"
                                           : isEcheance
                                           ? "#c6e0b4"
                                           : "#ffffff",
+                                        color: isOngletEnveloppes ? "#020617" : "#020617",
                                         outline: "none",
                                       }}
                                     >
@@ -4984,7 +5173,7 @@ const styles = {
 
   viewTabButtonActive: {
     background: "linear-gradient(135deg, #facc15 0%, #f59e0b 100%)",
-    color: "#ffffff",
+    color: "#111827",
     borderColor: "rgba(250,204,21,0.95)",
     boxShadow: "0 12px 32px rgba(250,204,21,0.38), 0 0 18px rgba(250,204,21,0.22), inset 0 1px 0 rgba(255,255,255,0.45)",
     transform: "translateY(-1px)",
@@ -5217,7 +5406,7 @@ const styles = {
     borderRadius: "9px",
     border: "1px solid #ca8a04",
     background: "linear-gradient(180deg, #fde047 0%, #facc15 100%)",
-    color: "#ffffff",
+    color: "#111827",
     fontWeight: "950",
     cursor: "pointer",
     boxShadow: "0 0 14px rgba(250,204,21,0.35), inset 0 1px 0 rgba(255,255,255,0.8)",
@@ -5259,7 +5448,7 @@ const styles = {
     borderRadius: "7px",
     border: "1px solid #93c5fd",
     background: "linear-gradient(180deg, #ffffff 0%, #f0f9ff 100%)",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "800",
     fontSize: "12px",
     padding: "0 6px",
@@ -5588,7 +5777,7 @@ const styles = {
   descriptionStarButtonOn: {
     background: "linear-gradient(180deg, #fde047 0%, #eab308 100%)",
     border: "1px solid #ca8a04",
-    color: "#ffffff",
+    color: "#111827",
     boxShadow: "0 0 12px rgba(250,204,21,0.65), inset 0 1px 0 rgba(255,255,255,0.8)",
   },
 
@@ -5597,7 +5786,7 @@ const styles = {
     border: "1px solid #eab308",
     borderRadius: "6px",
     padding: "2px 6px",
-    color: "#ffffff",
+    color: "#111827",
     fontWeight: "950",
     boxShadow: "0 0 10px rgba(250,204,21,0.40)",
   },
@@ -5623,7 +5812,7 @@ const styles = {
   descriptionEditButtonYellow: {
     background: "linear-gradient(180deg, #fef08a 0%, #facc15 100%)",
     border: "1px solid #eab308",
-    color: "#ffffff",
+    color: "#111827",
     fontWeight: "950",
     boxShadow: "0 0 0 2px rgba(250,204,21,0.22), inset 0 1px 0 rgba(255,255,255,0.8)",
   },
@@ -5657,7 +5846,7 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid rgba(250,204,21,0.52)",
     background: "linear-gradient(180deg, #facc15 0%, #ca8a04 100%)",
-    color: "#ffffff",
+    color: "#111827",
     fontWeight: "950",
     fontSize: "13px",
     cursor: "pointer",
@@ -6449,7 +6638,7 @@ const styles = {
     justifyContent: "center",
     textAlign: "center",
     background: "linear-gradient(180deg, #facc15, #b8860b)",
-    color: "#ffffff",
+    color: "#111827",
     fontWeight: "900",
     boxShadow: "0 0 16px rgba(250,204,21,0.22)",
   },
@@ -6534,7 +6723,7 @@ const styles = {
   calendarDay: {height: "64px", borderRadius: "10px", border: "1px solid rgba(148,163,184,0.14)", background: "linear-gradient(180deg, rgba(15,23,42,0.88), rgba(8,22,40,0.88))", color: "#f8fafc", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
     textAlign: "center", gap: "5px", fontWeight: "900", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)"},
 
-  calendarToday: {border: "1px solid rgba(250,204,21,0.78)", background: "linear-gradient(180deg, rgba(250,204,21,0.95), rgba(184,134,11,0.95))", color: "#ffffff", boxShadow: "0 0 20px rgba(250,204,21,0.28)"},
+  calendarToday: {border: "1px solid rgba(250,204,21,0.78)", background: "linear-gradient(180deg, rgba(250,204,21,0.95), rgba(184,134,11,0.95))", color: "#111827", boxShadow: "0 0 20px rgba(250,204,21,0.28)"},
 
   calendarEmptyDay: {opacity: 0.25, cursor: "default", background: "rgba(15,23,42,0.25)"},
 
@@ -7625,7 +7814,7 @@ const styles = {
     height: "38px",
     padding: "0 18px",
     background: "linear-gradient(180deg, #facc15 0%, #ca8a04 100%)",
-    color: "#ffffff",
+    color: "#111827",
     border: "1px solid rgba(250,204,21,0.52)",
     borderRadius: "8px",
     fontWeight: "950",
@@ -7639,7 +7828,7 @@ const styles = {
     border: "1px solid rgba(250, 204, 21, 0.42)",
     borderRadius: "10px",
     cursor: "pointer",
-    color: "#ffffff",
+    color: "#111827",
     fontWeight: "900",
     boxShadow: "0 0 18px rgba(250,204,21,0.22), inset 0 1px 0 rgba(255,255,255,0.35)",
   },
@@ -7675,7 +7864,7 @@ const styles = {
     borderSpacing: 0,
     tableLayout: "fixed",
     minWidth: "3200px",
-    color: "#ffffff",
+    color: "#111827",
     fontSize: "12px",
   },
 
@@ -7723,7 +7912,7 @@ const styles = {
   stickyCell: {
     position: "sticky",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#111827",
     zIndex: 70,
     boxShadow: "2px 0 0 rgba(15,23,42,0.20)",
   },
@@ -7864,7 +8053,7 @@ const styles = {
     padding: 0,
     userSelect: "none",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
   },
 
   weekCell: {
@@ -7881,7 +8070,7 @@ const styles = {
     cursor: "pointer",
     userSelect: "none",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
   },
 
   deleteButton: {
@@ -8291,7 +8480,7 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.55)",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "850",
     padding: "0 12px",
     outline: "none",
@@ -8303,7 +8492,7 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "800",
     padding: "0 12px",
     outline: "none",
@@ -8315,7 +8504,7 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "850",
     padding: "0 12px",
     outline: "none",
@@ -8327,7 +8516,7 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "850",
     padding: "0 12px",
     outline: "none",
@@ -8339,7 +8528,7 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "850",
     padding: "0 12px",
     outline: "none",
@@ -8352,7 +8541,7 @@ const styles = {
     borderRadius: "13px",
     border: "1px solid rgba(255,255,255,0.25)",
     background: "linear-gradient(180deg, #facc15 0%, #ca8a04 100%)",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "950",
     cursor: "pointer",
     boxShadow: "0 0 18px rgba(250,204,21,0.34), inset 0 1px 0 rgba(255,255,255,0.4)",
@@ -8362,7 +8551,7 @@ const styles = {
   incomeBankShellBright: {
     width: "calc(100vw - 24px)",
     margin: "0 auto",
-    color: "#ffffff",
+    color: "#020617",
   },
 
   incomeBankTableShellBright: {
@@ -8381,13 +8570,13 @@ const styles = {
     borderCollapse: "collapse",
     tableLayout: "auto",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontFamily: "Arial, sans-serif",
   },
 
   incomeMirrorShell: {
     width: "100%",
-    color: "#ffffff",
+    color: "#020617",
   },
 
   incomeMirrorPanel: {
@@ -8425,7 +8614,7 @@ const styles = {
   incomeMirrorNote: {
     padding: "10px 24px",
     background: "#eaf4ff",
-    color: "#ffffff",
+    color: "#020617",
     fontSize: "12px",
     fontWeight: "800",
     borderBottom: "1px solid #cbd5e1",
@@ -8443,7 +8632,7 @@ const styles = {
     borderCollapse: "collapse",
     tableLayout: "auto",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontFamily: "Arial, sans-serif",
   },
 
@@ -8460,7 +8649,7 @@ const styles = {
 
   incomeMirrorSubTh: {
     background: "#eaf4ff",
-    color: "#ffffff",
+    color: "#020617",
     padding: "6px",
     border: "1px solid #cbd5e1",
     fontSize: "11px",
@@ -8485,7 +8674,7 @@ const styles = {
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "850",
     padding: "0 8px",
     outline: "none",
@@ -8504,7 +8693,7 @@ const styles = {
     borderRadius: "7px",
     border: "1px solid #93c5fd",
     background: "#f8fbff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "900",
     textAlign: "right",
     padding: "0 8px",
@@ -8514,7 +8703,7 @@ const styles = {
   incomeMirrorSoldeCell: {
     background: "#fff7ed",
     border: "1px solid #cbd5e1",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "950",
     fontSize: "13px",
     padding: "6px 10px",
@@ -8540,7 +8729,7 @@ const styles = {
   },
 
   incomeMirrorFooterLabel: {
-    color: "#ffffff",
+    color: "#020617",
     fontSize: "12px",
     fontWeight: "950",
     letterSpacing: "0.2px",
@@ -8569,7 +8758,7 @@ const styles = {
     overflow: "hidden",
     border: "1px solid #c7d2fe",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     boxShadow: "0 24px 80px rgba(0,0,0,0.38)",
   },
 
@@ -8598,7 +8787,7 @@ const styles = {
   standardMirrorNote: {
     padding: "10px 24px",
     background: "#eaf4ff",
-    color: "#ffffff",
+    color: "#020617",
     fontSize: "12px",
     fontWeight: "800",
     borderBottom: "1px solid #cbd5e1",
@@ -8616,7 +8805,7 @@ const styles = {
     borderCollapse: "collapse",
     tableLayout: "auto",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontFamily: "Arial, sans-serif",
   },
 
@@ -8633,7 +8822,7 @@ const styles = {
 
   standardMirrorSubTh: {
     background: "#eaf4ff",
-    color: "#ffffff",
+    color: "#020617",
     padding: "6px",
     border: "1px solid #cbd5e1",
     fontSize: "11px",
@@ -8674,7 +8863,7 @@ const styles = {
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "850",
     padding: "0 8px",
     outline: "none",
@@ -8693,7 +8882,7 @@ const styles = {
     borderRadius: "7px",
     border: "1px solid #93c5fd",
     background: "#f8fbff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "900",
     textAlign: "right",
     padding: "0 8px",
@@ -8703,7 +8892,7 @@ const styles = {
   standardMirrorSoldeCell: {
     background: "#fff7ed",
     border: "1px solid #cbd5e1",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "950",
     fontSize: "13px",
     padding: "6px 10px",
@@ -8748,7 +8937,7 @@ const styles = {
   },
 
   standardMirrorFooterLabel: {
-    color: "#ffffff",
+    color: "#020617",
     fontSize: "12px",
     fontWeight: "950",
     letterSpacing: "0.2px",
@@ -8772,7 +8961,7 @@ const styles = {
 
   entreeCleanShell: {
     width: "100%",
-    color: "#ffffff",
+    color: "#020617",
   },
 
   entreeCleanToolbar: {
@@ -8795,7 +8984,7 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.55)",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "900",
     padding: "0 12px",
     outline: "none",
@@ -8807,7 +8996,7 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "850",
     padding: "0 12px",
     outline: "none",
@@ -8819,7 +9008,7 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "900",
     padding: "0 12px",
     outline: "none",
@@ -8832,7 +9021,7 @@ const styles = {
     borderRadius: "13px",
     border: "1px solid rgba(255,255,255,0.26)",
     background: "linear-gradient(180deg, #facc15 0%, #ca8a04 100%)",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "950",
     cursor: "pointer",
     boxShadow: "0 0 18px rgba(250,204,21,0.35), inset 0 1px 0 rgba(255,255,255,0.42)",
@@ -8846,7 +9035,7 @@ const styles = {
     overflow: "hidden",
     border: "1px solid #c7d2fe",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     boxShadow: "0 24px 80px rgba(0,0,0,0.38)",
   },
 
@@ -8859,7 +9048,7 @@ const styles = {
   entreeCleanNote: {
     padding: "10px 24px",
     background: "#eaf4ff",
-    color: "#ffffff",
+    color: "#020617",
     fontSize: "12px",
     fontWeight: "800",
     borderBottom: "1px solid #cbd5e1",
@@ -8877,7 +9066,7 @@ const styles = {
     borderCollapse: "collapse",
     tableLayout: "auto",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontFamily: "Arial, sans-serif",
   },
 
@@ -8909,7 +9098,7 @@ const styles = {
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "850",
     padding: "0 8px",
     outline: "none",
@@ -8928,7 +9117,7 @@ const styles = {
     borderRadius: "7px",
     border: "1px solid #93c5fd",
     background: "#f8fbff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "900",
     textAlign: "right",
     padding: "0 8px",
@@ -8938,7 +9127,7 @@ const styles = {
   entreeCleanSoldeCell: {
     background: "#fff7ed",
     border: "1px solid #cbd5e1",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "950",
     fontSize: "13px",
     padding: "6px 10px",
@@ -8970,7 +9159,7 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "900",
     padding: "0 12px",
     outline: "none",
@@ -8999,7 +9188,7 @@ const styles = {
 
   entreeCleanEmptyCell: {
     background: "#f8fafc",
-    color: "#ffffff",
+    color: "#020617",
     border: "1px solid #cbd5e1",
     padding: "18px",
     fontSize: "14px",
@@ -9013,7 +9202,7 @@ const styles = {
     borderRadius: "6px",
     border: "1px solid #9ca3af",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "850",
     padding: "0 6px",
     outline: "none",
@@ -9024,7 +9213,7 @@ const styles = {
     minWidth: "170px",
     border: "1px solid #9ca3af",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "800",
     padding: "0 6px",
     outline: "none",
@@ -9036,7 +9225,7 @@ const styles = {
     borderRadius: "6px",
     border: "1px solid #cbd5e1",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     padding: "5px 8px",
     display: "flex",
     alignItems: "center",
@@ -9081,14 +9270,14 @@ const styles = {
     borderRadius: "6px",
     border: "1px solid #9ca3af",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "950",
     cursor: "pointer",
   },
 
   entreeUltraShell: {
     width: "100%",
-    color: "#ffffff",
+    color: "#020617",
   },
 
   entreeUltraToolbar: {
@@ -9111,7 +9300,7 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.55)",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "900",
     padding: "0 12px",
     outline: "none",
@@ -9123,7 +9312,7 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "850",
     padding: "0 12px",
     outline: "none",
@@ -9135,7 +9324,7 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "900",
     padding: "0 12px",
     outline: "none",
@@ -9147,7 +9336,7 @@ const styles = {
     borderRadius: "8px",
     border: "1px solid rgba(147,197,253,0.45)",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "900",
     padding: "0 12px",
     outline: "none",
@@ -9160,7 +9349,7 @@ const styles = {
     borderRadius: "13px",
     border: "1px solid rgba(255,255,255,0.26)",
     background: "linear-gradient(180deg, #facc15 0%, #ca8a04 100%)",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "950",
     cursor: "pointer",
     boxShadow: "0 0 18px rgba(250,204,21,0.35), inset 0 1px 0 rgba(255,255,255,0.42)",
@@ -9174,7 +9363,7 @@ const styles = {
     overflow: "hidden",
     border: "1px solid #c7d2fe",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     boxShadow: "0 24px 80px rgba(0,0,0,0.38)",
   },
 
@@ -9187,7 +9376,7 @@ const styles = {
   entreeUltraNote: {
     padding: "10px 24px",
     background: "#eaf4ff",
-    color: "#ffffff",
+    color: "#020617",
     fontSize: "12px",
     fontWeight: "800",
     borderBottom: "1px solid #cbd5e1",
@@ -9205,7 +9394,7 @@ const styles = {
     borderCollapse: "collapse",
     tableLayout: "auto",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontFamily: "Arial, sans-serif",
   },
 
@@ -9252,7 +9441,7 @@ const styles = {
     borderRadius: "7px",
     border: "1px solid #93c5fd",
     background: "#f8fbff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "900",
     textAlign: "right",
     padding: "0 8px",
@@ -9305,7 +9494,7 @@ const styles = {
   },
 
   entreeUltraFooterLabel: {
-    color: "#ffffff",
+    color: "#020617",
     fontSize: "12px",
     fontWeight: "950",
     letterSpacing: "0.2px",
@@ -9354,7 +9543,7 @@ const styles = {
   },
 
   entreeUltraFooterLabelSmall: {
-    color: "#ffffff",
+    color: "#020617",
     fontSize: "10px",
     fontWeight: "950",
     letterSpacing: "0.6px",
@@ -9448,7 +9637,7 @@ const styles = {
     tableLayout: "auto",
     borderCollapse: "collapse",
     background: "#dbeafe",
-    color: "#ffffff",
+    color: "#020617",
     fontFamily: "Arial, sans-serif",
     borderTop: "1px solid #93c5fd",
   },
@@ -9481,7 +9670,7 @@ const styles = {
   },
 
   entreeUltraFooterBoxLabel: {
-    color: "#ffffff",
+    color: "#020617",
     display: "none",
   },
 
@@ -9515,7 +9704,7 @@ const styles = {
     maxWidth: "820px",
     margin: "18px auto 36px auto",
     padding: "14px 18px 18px 18px",
-    color: "#ffffff",
+    color: "#020617",
     cursor: "grab",
     userSelect: "none",
     fontFamily: "Arial, sans-serif",
@@ -9680,7 +9869,7 @@ const styles = {
     gridTemplateColumns: "54px 1fr 170px",
     alignItems: "center",
     gap: "14px",
-    color: "#ffffff",
+    color: "#020617",
     borderBottom: "1px solid rgba(203,213,225,0.80)",
     paddingBottom: "10px",
   },
@@ -9704,7 +9893,7 @@ const styles = {
     background: "linear-gradient(180deg, #f8fafc 0%, #e5e7eb 100%)",
     border: "2px solid #cbd5e1",
     borderRadius: "8px",
-    color: "#ffffff",
+    color: "#020617",
     textAlign: "right",
     fontWeight: "950",
     fontSize: "14px",
@@ -9715,7 +9904,7 @@ const styles = {
   },
 
   ultraBankCalculated: {
-    color: "#ffffff",
+    color: "#020617",
     textAlign: "right",
     fontWeight: "950",
     fontSize: "14px",
@@ -9775,7 +9964,7 @@ const styles = {
     borderRadius: "999px",
     border: "1px solid #d1d5db",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "950",
     fontSize: "20px",
     lineHeight: "32px",
@@ -9838,7 +10027,7 @@ const styles = {
   },
 
   bankCleanLabel: {
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "950",
     fontSize: "15px",
     padding: "13px 16px",
@@ -9847,7 +10036,7 @@ const styles = {
   },
 
   bankCleanAmount: {
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "950",
     fontSize: "17px",
     padding: "13px 12px",
@@ -9941,7 +10130,7 @@ const styles = {
     borderRadius: "9px",
     border: "1px solid #cbd5e1",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     display: "flex",
     alignItems: "center",
     justifyContent: "flex-end",
@@ -9975,7 +10164,7 @@ const styles = {
     borderRadius: "9px",
     border: "1px solid #d1d5db",
     background: "#ffffff",
-    color: "#ffffff",
+    color: "#020617",
     textAlign: "right",
     padding: "0 38px 0 14px",
     fontSize: "22px",
@@ -9989,7 +10178,7 @@ const styles = {
     right: "18px",
     top: "50%",
     transform: "translateY(-50%)",
-    color: "#ffffff",
+    color: "#020617",
     fontWeight: "950",
     fontSize: "20px",
     pointerEvents: "none",
